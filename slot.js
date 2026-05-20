@@ -1149,7 +1149,10 @@ function initMobileOptimizations() {
         container.style.setProperty('--slot-scale', '1');
         board.style.transform = '';
         board.style.width = '';
+        board.style.marginTop = '';
         board.style.marginBottom = '';
+        board.style.marginLeft = '';
+        board.style.marginRight = '';
 
         const vv = window.visualViewport;
         const viewW = vv?.width ?? window.innerWidth;
@@ -1192,6 +1195,11 @@ function initMobileOptimizations() {
     window.addEventListener('resize', scheduleLayout, { passive: true });
     window.visualViewport?.addEventListener('resize', scheduleLayout, { passive: true });
     window.visualViewport?.addEventListener('scroll', scheduleLayout, { passive: true });
+
+    window.addEventListener('message', (event) => {
+        if (event.origin !== window.location.origin) return;
+        if (event.data?.type === 'RAVE_SLOT_LAYOUT') scheduleLayout();
+    });
 
     const fsBtn = document.getElementById('mobileFsBtn');
     if (fsBtn && !fsBtn.dataset.bound) {

@@ -49,6 +49,19 @@ export default function RavePlayPage() {
     setImmersive((v) => !v);
   }, []);
 
+  const notifySlotLayout = useCallback(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: "RAVE_SLOT_LAYOUT" },
+      window.location.origin,
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!immersive) return;
+    const t = window.setTimeout(() => notifySlotLayout(), 80);
+    return () => window.clearTimeout(t);
+  }, [immersive, notifySlotLayout]);
+
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
@@ -79,22 +92,34 @@ export default function RavePlayPage() {
   }, []);
 
   useEffect(() => {
-    if (!mobile || !iframeRef.current) return;
+    if (!iframeRef.current) return;
     const iframe = iframeRef.current;
-    const postHeight = () => {
-      const h =
+    const syncFrame = () => {
+      const viewportH =
         window.visualViewport?.height ??
         document.documentElement.clientHeight;
-      iframe.style.height = `${Math.round(h)}px`;
+      const toolbar = shellRef.current?.querySelector<HTMLElement>(
+        ".play-toolbar",
+      );
+      const toolbarH = toolbar?.offsetHeight ?? 0;
+      if (mobile || immersive) {
+        iframe.style.height = `${Math.max(200, Math.round(viewportH - toolbarH))}px`;
+      } else {
+        iframe.style.height = "";
+      }
+      notifySlotLayout();
     };
-    postHeight();
-    window.visualViewport?.addEventListener("resize", postHeight);
-    window.addEventListener("resize", postHeight);
+    syncFrame();
+    const ro = shellRef.current ? new ResizeObserver(syncFrame) : null;
+    if (shellRef.current) ro?.observe(shellRef.current);
+    window.visualViewport?.addEventListener("resize", syncFrame);
+    window.addEventListener("resize", syncFrame);
     return () => {
-      window.visualViewport?.removeEventListener("resize", postHeight);
-      window.removeEventListener("resize", postHeight);
+      ro?.disconnect();
+      window.visualViewport?.removeEventListener("resize", syncFrame);
+      window.removeEventListener("resize", syncFrame);
     };
-  }, [mobile]);
+  }, [mobile, immersive, notifySlotLayout]);
 
   return (
     <main className={`play-page${mobile ? " play-page--mobile" : ""}`}>
@@ -102,35 +127,33 @@ export default function RavePlayPage() {
         ref={shellRef}
         className={`play-shell${immersive ? " play-shell--immersive" : ""}`}
       >
-        <div className="play-toolbar">
-          <Link href="/" className="play-back">
-            ← Назад
-          </Link>
-          {!mobile && (
+        {!mobile && (
+          <div className="play-toolbar">
+            <Link href="/" className="play-back">
+              ← Назад
+            </Link>
             <div className="play-toolbar-meta">
               <p className="eyebrow">Now Playing</p>
               <h1>Rave Slot</h1>
             </div>
-          )}
-          <div className="play-toolbar-actions">
-            {mobile && (
-              <span className="play-toolbar-hint">Баланс синхронизируется с аккаунтом</span>
-            )}
-            <button
-              type="button"
-              onClick={() => void enterFullscreen()}
-              className="secondary-btn play-fs-btn"
-            >
-              {immersive ? "Свернуть" : "На весь экран"}
-            </button>
+            <div className="play-toolbar-actions">
+              <button
+                type="button"
+                onClick={() => void enterFullscreen()}
+                className="secondary-btn play-fs-btn"
+              >
+                {immersive ? "Свернуть" : "На весь экран"}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
         <iframe
           ref={iframeRef}
           src="/slot/index.html?embed=1"
           className="slot-frame"
           title="Rave Slot"
           allow="autoplay; fullscreen"
+          onLoad={notifySlotLayout}
         />
       </div>
     </main>
