@@ -36,6 +36,9 @@ const REEL_STOP_STAGGER_FAST_MS = 100; // Турбо: быстрее остан�
 /** Турбо-режим: меньше пауза между остановками барабанов (кнопка ⚡). */
 let fastReelStopMode = false;
 
+/** Кэш предзагрузки PNG символов (без повторного decode при спине). */
+const symbolImagesPreload = { done: false, promise: null };
+
 /** Мобильный / touch: упрощённые эффекты и авто-масштаб. */
 let isMobileSlot = false;
 let isEmbeddedSlot = false;
@@ -1089,7 +1092,7 @@ function buildScatterInnerForCell(symbolName, mult, reelIndex, isEnhancerMini) {
         : '';
     /** В окошке enhancer не дублируем +1/+2 второй раз — только на основном барабане */
     const scatterExtras = (!isEnhancerMini && symbolName === 'scatter') ? scatterBonusExtraHtml(reelIndex) : '';
-    return `<img src="images/${symbolName}.png" alt="${symbolName}">${scatterExtras}${multPart}`;
+    return `${symbolImgTag(symbolName)}${scatterExtras}${multPart}`;
 }
 
 function updateLastSeedHud() {}
@@ -1195,9 +1198,9 @@ function initMobileOptimizations() {
     }
 }
 
-function initSlotAfterBooksReady() {
+async function initSlotAfterBooksReady() {
     initMobileOptimizations();
-    preloadImages();
+    await preloadImages();
     initReels();
     setupEventListeners();
     updateBalance();
@@ -1248,6 +1251,7 @@ async function verifyBooksServerReady() {
     setBooksBootProgress(ok ? 1 : 0.25);
 
     if (ok) {
+        void preloadImages();
         const total = ALL_BOOK_STORES.reduce((sum, s) => sum + (s.bookCount || 0), 0);
         setBooksBootUi({
             status: `Готово: ${ALL_BOOK_STORES.length} файлов, ${total.toLocaleString('ru-RU')} книг.`,
@@ -1314,7 +1318,7 @@ function enterSlotFromBoot(screen) {
         screen.classList.add('books-boot-screen--done');
         setTimeout(() => screen.remove(), 450);
     }
-    initSlotAfterBooksReady();
+    void initSlotAfterBooksReady();
 }
 
 // Инициализация: сначала загрузка всех книг, затем слот по кнопке «Продолжить»
@@ -1369,12 +1373,48 @@ function initBackgroundMusic() {
     });
 }
 
-// Предзагрузка всех картинок символов
+function symbolImageSrc(symbolName) {
+    const name = symbolName === 'split_wilds' ? 'split_wilds' : symbolName;
+    return `images/${name}.png`;
+}
+
+function symbolImgTag(symbolName, extraAttrs = '') {
+    const name = symbolName === 'split_wilds' ? 'split_wilds' : symbolName;
+    return `<img src="${symbolImageSrc(name)}" alt="${name}" loading="eager" decoding="sync" draggable="false"${extraAttrs ? ` ${extraAttrs}` : ''}>`;
+}
+
+function symbolCellHtml(symbolName, extraInner = '') {
+    return `<div class="symbol">${symbolImgTag(symbolName)}${extraInner}</div>`;
+}
+
+/** Предзагрузка + decode всех символов до первого спина */
 function preloadImages() {
-    SYMBOLS.forEach(symbol => {
-        const img = new Image();
-        img.src = `images/${symbol}.png`;
+    if (symbolImagesPreload.promise) return symbolImagesPreload.promise;
+
+    symbolImagesPreload.promise = Promise.all(
+        SYMBOLS.map(
+            (symbol) =>
+                new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = async () => {
+                        if (typeof img.decode === 'function') {
+                            try {
+                                await img.decode();
+                            } catch (_) {
+                                /* ignore */
+                            }
+                        }
+                        resolve();
+                    };
+                    img.onerror = () => resolve();
+                    img.src = symbolImageSrc(symbol);
+                }),
+        ),
+    ).then(() => {
+        symbolImagesPreload.done = true;
     });
+
+    return symbolImagesPreload.promise;
 }
 
 // Инициализация барабанов
@@ -1405,8 +1445,9 @@ function createSymbolElement(symbolName, mult = 1) {
     const img = document.createElement('img');
     img.src = `images/${symbolName}.png`;
     img.alt = symbolName;
-    img.loading = isMobileSlot ? 'lazy' : 'eager';
-    img.decoding = isMobileSlot ? 'async' : 'sync';
+    img.loading = 'eager';
+    img.decoding = 'sync';
+    img.draggable = false;
     div.appendChild(img);
 
     if (mult > 1) {
@@ -1996,7 +2037,7 @@ async function maybeResolveExactlyTwoScatters(
         const safeH = Number.isFinite(heightPx) && heightPx > 0 ? heightPx : 100;
         return (
             `<div style="height:${safeH}px; display:flex; align-items:center; justify-content:center;">
-                <img src="images/${showName}.png" alt="${showName}" style="width:100%; height:100%; object-fit:contain;" />
+                ${symbolImgTag(showName, 'style="width:100%; height:100%; object-fit:contain;"')}
             </div>`
         );
     }
@@ -2049,8 +2090,6 @@ async function maybeResolveExactlyTwoScatters(
                 createSpinItemHtml('scatter', cellHeight)
             ].join('');
 
-            // Чтобы не мигнул финал на 1 кадр: сначала скрываем, ставим стартовую позицию
-            viewport.style.visibility = 'hidden';
             viewport.appendChild(strip);
             cellEl.innerHTML = '';
             cellEl.appendChild(viewport);
@@ -2059,9 +2098,7 @@ async function maybeResolveExactlyTwoScatters(
             strip.style.transform = `translateY(-${startOffset}px)`;
             strip.getBoundingClientRect();
 
-            requestAnimationFrame(() => {
-                viewport.style.visibility = 'visible';
-                
+            {
                 // Используем физику
                 const scrollV = (REEL_SPIN_LINEAR_FRAC * startOffset) / REEL_SPIN_BASE_LINEAR_MS;
                 const decelDistance = Math.max(0, startOffset - scrollV * REEL_SPIN_BASE_LINEAR_MS);
@@ -2096,7 +2133,7 @@ async function maybeResolveExactlyTwoScatters(
 
                     if (finished) {
                         // Восстанавливаем “нормальный” вид ячейки
-                        cellEl.innerHTML = `<img src="images/${finalShowName}.png" alt="${finalShowName}">`;
+                        cellEl.innerHTML = symbolImgTag(finalShowName);
                         cellEl.classList.remove('scatter-mini-spin');
                         resolve({ oldHtml });
                         return;
@@ -2105,7 +2142,7 @@ async function maybeResolveExactlyTwoScatters(
                 };
 
                 requestAnimationFrame(tick);
-            });
+            }
         });
     }
 
@@ -2831,7 +2868,7 @@ function spinEnhancerReel(reelIndex, enhancerSymbolIndex, extraDurationMs = 0, s
             }
         }
 
-        htmlParts.push(`<div class="symbol"><img src="images/${landingSymbolName}.png" alt="${landingSymbolName}">${badgeHtml}</div>`);
+        htmlParts.push(symbolCellHtml(landingSymbolName, badgeHtml));
         
         // 2) Рандомные символы
         let totalSpinSymbols = Number(forcedSpinSymbols) || 0;
@@ -2842,27 +2879,19 @@ function spinEnhancerReel(reelIndex, enhancerSymbolIndex, extraDurationMs = 0, s
         }
         for (let i = 0; i < totalSpinSymbols; i++) {
             const rndSymbol = getRandomSymbolName();
-            htmlParts.push(`<div class="symbol"><img src="images/${rndSymbol}.png" alt="${rndSymbol}"></div>`);
+            htmlParts.push(symbolCellHtml(rndSymbol));
         }
         
         // 3) Текущий символ (старый) - берем из DOM
         const currentImg = enhancerContent.querySelector('img');
         const currentName = currentImg ? currentImg.alt : 'high1';
-        htmlParts.push(`<div class="symbol"><img src="images/${currentName}.png" alt="${currentName}"></div>`);
+        htmlParts.push(symbolCellHtml(currentName));
         
         enhancerContent.style.transition = 'none';
-        enhancerContent.style.visibility = 'hidden';
-        
         const startOffset = (1 + totalSpinSymbols) * symbolHeight;
-        enhancerContent.style.transform = `translateY(-${startOffset}px)`;
-        enhancerContent.getBoundingClientRect();
-        
         enhancerContent.innerHTML = htmlParts.join('');
+        enhancerContent.getBoundingClientRect();
         enhancerContent.style.transform = `translateY(-${startOffset}px)`;
-        
-        requestAnimationFrame(() => {
-            enhancerContent.style.visibility = 'visible';
-        });
         
         const delay = reelIndex * REEL_START_STAGGER_MS;
         
@@ -2966,7 +2995,7 @@ async function revealEnhancerSymbol(reelIndex, enhancerSymbolIndex) {
         // Показать заменитель xWays (если есть глобально выбранный)
         const replacement = window.xWaysReplacementSymbol || null;
         const showName = replacement || 'high5';
-        content.innerHTML = `<div class="symbol"><img src="images/${showName}.png" alt="${showName}"></div>`;
+        content.innerHTML = symbolCellHtml(showName);
 
         // Небольшой пульс при раскрытии
         content.style.transform = 'scale(1)';
@@ -3004,7 +3033,7 @@ function spinReel(reelIndex, finalSymbols, extraDurationMs = 0, scrollVPxPerMs, 
                 if (reelIndex === 4 && bonusScatterCount === 3) extraHtml += `<span class="scatter-plus">+1</span>`;
                 else if (reelIndex === 0 && bonusScatterCount === 4) extraHtml += `<span class="scatter-plus">+2</span>`;
             }
-            htmlParts.push(`<div class="symbol"><img src="images/${displayName}.png" alt="${displayName}">${extraHtml}</div>`);
+            htmlParts.push(symbolCellHtml(displayName, extraHtml));
         }
         
         // 2) Рандомные символы для анимации
@@ -3015,7 +3044,7 @@ function spinReel(reelIndex, finalSymbols, extraDurationMs = 0, scrollVPxPerMs, 
         }
         for (let i = 0; i < totalSpinSymbols; i++) {
             const rndSymbol = getRandomSymbolName();
-            htmlParts.push(`<div class="symbol"><img src="images/${rndSymbol}.png" alt="${rndSymbol}"></div>`);
+            htmlParts.push(symbolCellHtml(rndSymbol));
         }
         
         // 3) Текущие символы (видны в начале)
@@ -3028,27 +3057,14 @@ function spinReel(reelIndex, finalSymbols, extraDurationMs = 0, scrollVPxPerMs, 
                 if (reelIndex === 4 && bonusScatterCount === 3) badge += `<span class="scatter-plus">+1</span>`;
                 else if (reelIndex === 0 && bonusScatterCount === 4) badge += `<span class="scatter-plus">+2</span>`;
             }
-            htmlParts.push(`<div class="symbol"><img src="images/${currentName}.png" alt="${currentName}">${badge}</div>`);
+            htmlParts.push(symbolCellHtml(currentName, badge));
         }
         
-        // ВАЖНО: чтобы не было мерцания финальной доски на 1 кадр,
-        // сначала скрываем, сбрасываем позицию, затем меняем HTML и показываем.
         reelContent.style.transition = 'none';
-        reelContent.style.visibility = 'hidden';
-
-        // Стартовая позиция: показываем "текущие" (они внизу ленты)
         const startOffset = (numVisible + totalSpinSymbols) * symbolHeight;
-        reelContent.style.transform = `translateY(-${startOffset}px)`;
-        // Принудительный reflow: гарантируем применение transform ДО замены контента
-        reelContent.getBoundingClientRect();
-
         reelContent.innerHTML = htmlParts.join('');
+        reelContent.getBoundingClientRect();
         reelContent.style.transform = `translateY(-${startOffset}px)`;
-
-        // Показываем на следующем кадре, чтобы браузер не успел отрисовать старый offset
-        requestAnimationFrame(() => {
-            reelContent.style.visibility = 'visible';
-        });
         
         // Конечная позиция: 0 (финальные вверху ленты становятся видимыми)
         const finalOffset = 0;
@@ -3263,7 +3279,7 @@ async function resolveSplitsAndUpdateBoardAnimated() {
             const splitEl = enhancerContent ? enhancerContent.querySelectorAll('.symbol')[0] : null;
             
             if (splitEl) {
-                splitEl.innerHTML = `<img src="images/split_wilds.png" alt="split_wilds">`;
+                splitEl.innerHTML = symbolImgTag('split_wilds');
                 splitEl.style.transition = 'transform 0.15s ease-out';
                 splitEl.style.transform = 'scale(1.15)';
                 setTimeout(() => splitEl.style.transform = 'scale(1)', 150);
@@ -3465,7 +3481,7 @@ function initBonus(scatterCount) {
         if (enhancer) {
             enhancer.classList.add('active');
             const eContent = enhancer.querySelector('.enhancer-content');
-            if (eContent) eContent.innerHTML = '<div class="symbol"><img src="images/wild.png" alt="wild"></div>';
+            if (eContent) eContent.innerHTML = symbolCellHtml('wild');
         }
     }
 }
@@ -3679,7 +3695,7 @@ async function startBonusFreeSpin() {
         if (enhancer && !enhancer.classList.contains('active')) {
             enhancer.classList.add('active');
             const eContent = enhancer.querySelector('.enhancer-content');
-            if (eContent) eContent.innerHTML = '<div class="symbol"><img src="images/wild.png" alt="wild"></div>';
+            if (eContent) eContent.innerHTML = symbolCellHtml('wild');
         }
         await sleep(500); // Небольшая пауза для эффекта
     } else if (upgradedScatterThisSpin === 2) {
@@ -3724,7 +3740,7 @@ async function startBonusFreeSpin() {
         if (enhancer && !enhancer.classList.contains('active')) {
             enhancer.classList.add('active');
             const eContent = enhancer.querySelector('.enhancer-content');
-            if (eContent) eContent.innerHTML = '<div class="symbol"><img src="images/wild.png" alt="wild"></div>';
+            if (eContent) eContent.innerHTML = symbolCellHtml('wild');
         }
         await sleep(500);
     }
