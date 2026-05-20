@@ -1180,9 +1180,33 @@ html.mobile-slot .symbol img {
     will-change: auto;
 }
 
+html.mobile-slot .reel {
+    contain: strict;
+    transition: none;
+}
+
 html.mobile-slot .reel-content,
 html.mobile-slot .enhancer-content {
+    will-change: auto;
+}
+
+html.mobile-slot .strip-compositing {
     will-change: transform;
+}
+
+html.mobile-slot.slot-spin-active .symbol.scatter-glow::after,
+html.mobile-slot.slot-spin-active .symbol.scatter-mini-spin::after,
+html.mobile-slot.slot-spin-active .enhancer.scatter-glow::after {
+    animation: none;
+    box-shadow: 0 0 10px rgba(244, 113, 181, 0.35);
+}
+
+html.mobile-slot .scatter-plus {
+    animation: none;
+}
+
+html.mobile-slot .symbol.scatter-pop {
+    animation-duration: 0.28s;
 }
 
 .symbol-bitmap-cache {

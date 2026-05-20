@@ -197,6 +197,9 @@ let skipReady = false;
 let skipAppearTimeout = null;
 let activeReelControllers = [];
 let activeEnhancerControllers = [];
+const spinAnimators = new Set();
+let spinAnimRafId = 0;
+let cachedSymbolHeightPx = 0;
 
 // Аудио: фон и бонусные треки
 let bgAudioEl = null;
@@ -506,12 +509,85 @@ const MOD_SCATTER4_COST_MULT = 140;
 const MOD_SCATTER5_COST_MULT = 522;
 const MOD_SCATTER202_COST_MULT = 202;
 
-function getSymbolHeight() {
+function refreshSymbolHeightCache() {
+    const root = document.documentElement;
+    const cssSize = Number.parseFloat(getComputedStyle(root).getPropertyValue('--symbol-size'));
+    if (Number.isFinite(cssSize) && cssSize > 0) {
+        cachedSymbolHeightPx = cssSize;
+        return;
+    }
     const reel = document.querySelector('.reel');
-    if (!reel) return 100;
+    if (!reel) return;
     const reelHeight = reel.getBoundingClientRect().height;
     const perRow = reelHeight / VISIBLE_ROWS;
-    return Number.isFinite(perRow) && perRow > 0 ? perRow : 100;
+    if (Number.isFinite(perRow) && perRow > 0) cachedSymbolHeightPx = perRow;
+}
+
+function getSymbolHeight() {
+    if (cachedSymbolHeightPx > 0) return cachedSymbolHeightPx;
+    refreshSymbolHeightCache();
+    return cachedSymbolHeightPx > 0 ? cachedSymbolHeightPx : 100;
+}
+
+function getReelDecelMs() {
+    if (!isMobileSlot) return REEL_DECEL_MS;
+    return fastReelStopMode ? 360 : 420;
+}
+
+function calcSpinStripSymbols(durationMs, forced = 0) {
+    const forcedN = Number(forced) || 0;
+    if (forcedN > 0) return forcedN;
+    const baseSpinSymbols = SYMBOLS.length * NUM_SPINS_PER_REEL;
+    let total = Math.max(1, Math.ceil(baseSpinSymbols * (durationMs / SPIN_DURATION)));
+    if (isMobileSlot) total = Math.max(4, Math.ceil(total * 0.5));
+    return total;
+}
+
+function slotPerfLog(...args) {
+    if (!isMobileSlot) console.log(...args);
+}
+
+function setStripCompositing(el, on) {
+    if (!el || !isMobileSlot) return;
+    if (on) {
+        el.classList.add('strip-compositing');
+    } else {
+        el.classList.remove('strip-compositing');
+    }
+}
+
+function markSlotSpinActive(active) {
+    document.documentElement.classList.toggle('slot-spin-active', active);
+}
+
+function pumpSpinAnimators(timestamp) {
+    spinAnimRafId = 0;
+    if (spinAnimators.size === 0) {
+        markSlotSpinActive(false);
+        return;
+    }
+    const now = timestamp ?? performance.now();
+    for (const anim of [...spinAnimators]) {
+        if (anim.tick(now)) spinAnimators.delete(anim);
+    }
+    if (spinAnimators.size > 0) {
+        spinAnimRafId = requestAnimationFrame(pumpSpinAnimators);
+    } else {
+        markSlotSpinActive(false);
+    }
+}
+
+function scheduleSpinAnimator(anim) {
+    spinAnimators.add(anim);
+    markSlotSpinActive(true);
+    if (!spinAnimRafId) {
+        spinAnimRafId = requestAnimationFrame(pumpSpinAnimators);
+    }
+}
+
+function forceReflowStrip(el) {
+    if (!el || isMobileSlot) return;
+    el.getBoundingClientRect();
 }
 
 function getRandomSymbolIndex(omitScatter = false) {
@@ -1190,11 +1266,23 @@ function initMobileOptimizations() {
         });
     };
 
+    refreshSymbolHeightCache();
     scheduleLayout();
-    document.addEventListener('rave-mobile-layout', scheduleLayout);
+    document.addEventListener('rave-mobile-layout', () => {
+        refreshSymbolHeightCache();
+        scheduleLayout();
+    });
     window.addEventListener('resize', scheduleLayout, { passive: true });
     window.visualViewport?.addEventListener('resize', scheduleLayout, { passive: true });
     window.visualViewport?.addEventListener('scroll', scheduleLayout, { passive: true });
+    window.addEventListener('resize', () => {
+        cachedSymbolHeightPx = 0;
+        refreshSymbolHeightCache();
+    }, { passive: true });
+    window.visualViewport?.addEventListener('resize', () => {
+        cachedSymbolHeightPx = 0;
+        refreshSymbolHeightCache();
+    }, { passive: true });
 
     window.addEventListener('message', (event) => {
         if (event.origin !== window.location.origin) return;
@@ -2142,67 +2230,46 @@ async function maybeResolveExactlyTwoScatters(
 
             cellEl.classList.add('scatter-mini-spin');
 
-            const rect = cellEl.getBoundingClientRect();
-            const cellHeight = (Number.isFinite(rect.height) && rect.height > 0) ? rect.height : getSymbolHeight();
-
-            // Сохраняем текущее содержимое, чтобы корректно восстановить структуру в конце
+            const cellHeight = getSymbolHeight();
             const oldHtml = cellEl.innerHTML;
-
-            // Убираем старый бейдж (если есть)
             const oldBadge = cellEl.querySelector('.symbol-mult');
             if (oldBadge) oldBadge.remove();
 
-            const baseSpinSymbols = SYMBOLS.length * NUM_SPINS_PER_REEL;
-            const totalSpinSymbols = Math.max(1, Math.ceil(baseSpinSymbols * (cellDurationMs / SPIN_DURATION)));
-
-            // Лента: ФИНАЛ (виден в конце) -> РАНДОМ -> СТАРТ (scatter виден в начале)
-            const randomParts = [];
-            for (let i = 0; i < totalSpinSymbols; i++) {
-                const pick = miniSymbols[Math.floor(Math.random() * miniSymbols.length)];
-                randomParts.push(createSpinItemHtml(pick, cellHeight));
-            }
-
+            const totalSpinSymbols = calcSpinStripSymbols(cellDurationMs);
             const viewport = document.createElement('div');
-            viewport.style.position = 'relative';
-            viewport.style.width = '100%';
-            viewport.style.height = '100%';
-            viewport.style.overflow = 'hidden';
+            viewport.className = 'scatter-mini-viewport';
+            viewport.style.cssText = 'position:relative;width:100%;height:100%;overflow:hidden';
 
             const strip = document.createElement('div');
-            strip.style.position = 'absolute';
-            strip.style.left = '0';
-            strip.style.top = '0';
-            strip.style.width = '100%';
-            if (!isMobileSlot) strip.style.willChange = 'transform';
+            strip.className = 'scatter-mini-strip';
+            strip.style.cssText = 'position:absolute;left:0;top:0;width:100%';
 
-            strip.innerHTML = [
-                createSpinItemHtml(finalShowName, cellHeight),
-                ...randomParts,
-                createSpinItemHtml('scatter', cellHeight)
-            ].join('');
-
+            const stripFrag = document.createDocumentFragment();
+            stripFrag.appendChild(cloneSymbolCell(finalShowName));
+            for (let i = 0; i < totalSpinSymbols; i++) {
+                const pick = miniSymbols[Math.floor(Math.random() * miniSymbols.length)];
+                stripFrag.appendChild(cloneSymbolCell(pick));
+            }
+            stripFrag.appendChild(cloneSymbolCell('scatter'));
+            strip.appendChild(stripFrag);
             viewport.appendChild(strip);
-            cellEl.innerHTML = '';
-            cellEl.appendChild(viewport);
+            cellEl.replaceChildren(viewport);
 
             const startOffset = (1 + totalSpinSymbols) * cellHeight;
-            strip.style.transform = `translateY(-${startOffset}px)`;
-            strip.getBoundingClientRect();
+            reelTransformY(strip, startOffset);
+            forceReflowStrip(strip);
 
-            {
-                // Используем физику
-                const scrollV = (REEL_SPIN_LINEAR_FRAC * startOffset) / REEL_SPIN_BASE_LINEAR_MS;
-                const decelDistance = Math.max(0, startOffset - scrollV * REEL_SPIN_BASE_LINEAR_MS);
-                let localTDecel = Math.max(0, (startOffset - decelDistance) / scrollV);
-                const decelMs = REEL_DECEL_MS;
-                const tDecelEnd = localTDecel + decelMs;
-                
-                const startPerf = performance.now();
+            const scrollV = (REEL_SPIN_LINEAR_FRAC * startOffset) / REEL_SPIN_BASE_LINEAR_MS;
+            const decelDistance = Math.max(0, startOffset - scrollV * REEL_SPIN_BASE_LINEAR_MS);
+            const localTDecel = Math.max(0, (startOffset - decelDistance) / scrollV);
+            const decelMs = getReelDecelMs();
+            const tDecelEnd = localTDecel + decelMs;
+            const startPerf = performance.now();
+            setStripCompositing(strip, true);
 
-                const tick = () => {
-                    const now = performance.now();
+            scheduleSpinAnimator({
+                tick(now) {
                     const elapsed = now - startPerf;
-                    
                     let currentOffset;
                     let finished;
 
@@ -2220,20 +2287,18 @@ async function maybeResolveExactlyTwoScatters(
                         finished = false;
                     }
 
-                    strip.style.transform = `translateY(-${currentOffset}px)`;
+                    reelTransformY(strip, currentOffset);
 
                     if (finished) {
-                        // Восстанавливаем “нормальный” вид ячейки
-                        cellEl.innerHTML = symbolImgTag(finalShowName);
+                        setStripCompositing(strip, false);
+                        cellEl.replaceChildren(cloneSymbolCell(finalShowName));
                         cellEl.classList.remove('scatter-mini-spin');
                         resolve({ oldHtml });
-                        return;
+                        return true;
                     }
-                    requestAnimationFrame(tick);
-                };
-
-                requestAnimationFrame(tick);
-            }
+                    return false;
+                },
+            });
         });
     }
 
@@ -2960,12 +3025,8 @@ function spinEnhancerReel(reelIndex, enhancerSymbolIndex, extraDurationMs = 0, s
 
         stripFrag.appendChild(landingCell);
         
-        let totalSpinSymbols = Number(forcedSpinSymbols) || 0;
-        if (totalSpinSymbols <= 0) {
-            const spinTime = Math.max(500, SPIN_DURATION - 500 + (Number(extraDurationMs) || 0));
-            const baseSpinSymbols = SYMBOLS.length * NUM_SPINS_PER_REEL;
-            totalSpinSymbols = Math.max(1, Math.ceil(baseSpinSymbols * (spinTime / SPIN_DURATION)));
-        }
+        const spinTime = Math.max(500, SPIN_DURATION - 500 + (Number(extraDurationMs) || 0));
+        const totalSpinSymbols = calcSpinStripSymbols(spinTime, forcedSpinSymbols);
         for (let i = 0; i < totalSpinSymbols; i++) {
             stripFrag.appendChild(cloneSymbolCell(getRandomSymbolName()));
         }
@@ -2978,14 +3039,15 @@ function spinEnhancerReel(reelIndex, enhancerSymbolIndex, extraDurationMs = 0, s
         enhancerContent.style.transition = 'none';
         const startOffset = (1 + totalSpinSymbols) * symbolHeight;
         enhancerContent.replaceChildren(stripFrag);
-        enhancerContent.getBoundingClientRect();
+        forceReflowStrip(enhancerContent);
         reelTransformY(enhancerContent, startOffset);
+        setStripCompositing(enhancerContent, true);
         
         const delay = reelIndex * REEL_START_STAGGER_MS;
         
         const scrollV = Math.max(1e-6, Number(scrollVPxPerMs) || 0);
         const tDecelStart = Math.max(0, Number(tDecelStartMs) || 0);
-        const decelMs = REEL_DECEL_MS;
+        const decelMs = getReelDecelMs();
         const tDecelEnd = tDecelStart + decelMs;
         
         const controller = {
@@ -3010,8 +3072,8 @@ function spinEnhancerReel(reelIndex, enhancerSymbolIndex, extraDurationMs = 0, s
             controller.started = true;
             controller.startPerf = performance.now();
 
-            const tick = () => {
-                const now = performance.now();
+            scheduleSpinAnimator({
+                tick(now) {
                 const elapsed = now - controller.startPerf;
 
                 let currentOffset;
@@ -3047,14 +3109,15 @@ function spinEnhancerReel(reelIndex, enhancerSymbolIndex, extraDurationMs = 0, s
 
                 if (finished) {
                     reelTransformY(enhancerContent, 0);
+                    setStripCompositing(enhancerContent, false);
                     const enhancerEl = document.getElementById(`enhancer${reelIndex}`);
                     if (enhancerEl) enhancerEl.classList.remove('reel-slow-glow', 'scatter-glow');
                     resolve();
-                } else {
-                    requestAnimationFrame(tick);
+                    return true;
                 }
-            };
-            requestAnimationFrame(tick);
+                return false;
+            },
+            });
         };
 
         controller.startTimeoutId = setTimeout(() => {
@@ -3124,11 +3187,7 @@ function spinReel(reelIndex, finalSymbols, extraDurationMs = 0, scrollVPxPerMs, 
         }
         
         // 2) Рандомные символы для анимации
-        let totalSpinSymbols = Number(forcedSpinSymbols) || 0;
-        if (totalSpinSymbols <= 0) {
-            const baseSpinSymbols = SYMBOLS.length * NUM_SPINS_PER_REEL;
-            totalSpinSymbols = Math.max(1, Math.ceil(baseSpinSymbols * (totalDuration / SPIN_DURATION)));
-        }
+        let totalSpinSymbols = calcSpinStripSymbols(totalDuration, forcedSpinSymbols);
         for (let i = 0; i < totalSpinSymbols; i++) {
             stripFrag.appendChild(cloneSymbolCell(getRandomSymbolName()));
         }
@@ -3151,8 +3210,9 @@ function spinReel(reelIndex, finalSymbols, extraDurationMs = 0, scrollVPxPerMs, 
         reelContent.style.transition = 'none';
         const startOffset = (numVisible + totalSpinSymbols) * symbolHeight;
         reelContent.replaceChildren(stripFrag);
-        reelContent.getBoundingClientRect();
+        forceReflowStrip(reelContent);
         reelTransformY(reelContent, startOffset);
+        setStripCompositing(reelContent, true);
         
         // Конечная позиция: 0 (финальные вверху ленты становятся видимыми)
         const finalOffset = 0;
@@ -3161,7 +3221,7 @@ function spinReel(reelIndex, finalSymbols, extraDurationMs = 0, scrollVPxPerMs, 
 
         const scrollV = Math.max(1e-6, Number(scrollVPxPerMs) || 0);
         const tDecelStart = Math.max(0, Number(tDecelStartMs) || 0);
-        const decelMs = REEL_DECEL_MS;
+        const decelMs = getReelDecelMs();
         const tDecelEnd = tDecelStart + decelMs;
 
         const controller = {
@@ -3186,8 +3246,8 @@ function spinReel(reelIndex, finalSymbols, extraDurationMs = 0, scrollVPxPerMs, 
             controller.started = true;
             controller.startPerf = performance.now();
 
-            const tick = () => {
-                const now = performance.now();
+            scheduleSpinAnimator({
+                tick(now) {
                 const elapsed = now - controller.startPerf;
 
                 let currentOffset;
@@ -3223,6 +3283,7 @@ function spinReel(reelIndex, finalSymbols, extraDurationMs = 0, scrollVPxPerMs, 
 
                 if (finished) {
                     reelTransformY(reelContent, -finalOffset);
+                    setStripCompositing(reelContent, false);
 
                     const scattersBefore = countScattersOnCurrentBoard();
 
@@ -3254,13 +3315,13 @@ function spinReel(reelIndex, finalSymbols, extraDurationMs = 0, scrollVPxPerMs, 
                     if (reelEl) reelEl.classList.remove('reel-slow-glow');
 
                     reelPositions[reelIndex] = finalSymbols[0];
-                    console.log(`Барабан ${reelIndex} остановился: [${finalSymbols.map(i => SYMBOLS[i]).join(', ')}]`);
+                    slotPerfLog(`Барабан ${reelIndex} остановился: [${finalSymbols.map(i => SYMBOLS[i]).join(', ')}]`);
                     resolve();
-                } else {
-                    requestAnimationFrame(tick);
+                    return true;
                 }
-            };
-            requestAnimationFrame(tick);
+                return false;
+            },
+            });
         };
 
         controller.startTimeoutId = setTimeout(() => {
