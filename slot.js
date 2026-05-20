@@ -38,6 +38,8 @@ let fastReelStopMode = false;
 
 /** Кэш предзагрузки PNG символов (без повторного decode при спине). */
 const symbolImagesPreload = { done: false, promise: null };
+/** Шаблоны DOM .symbol для cloneNode вместо innerHTML при спине. */
+const symbolTemplateByName = new Map();
 
 /** Мобильный / touch: упрощённые эффекты и авто-масштаб. */
 let isMobileSlot = false;
@@ -1069,7 +1071,9 @@ function refreshVisibleReelsDomFromBoard() {
                 const wraps = ec.querySelectorAll('.symbol');
                 const w0 = wraps[0];
                 if (w0) {
-                    w0.innerHTML = buildScatterInnerForCell(bot, botMult, reelIndex, true);
+                    const fresh = cloneSymbolCell(bot);
+                    appendSymbolCellExtras(fresh, { mult: botMult, reelIndex, isEnhancerMini: true });
+                    w0.replaceWith(fresh);
                 }
             }
         }
@@ -1080,7 +1084,9 @@ function refreshVisibleReelsDomFromBoard() {
             if (!cell) continue;
             const name = currentBoard[reelIndex][row];
             const mult = currentBoardMult[reelIndex][row] || 1;
-            cell.innerHTML = buildScatterInnerForCell(name, mult, reelIndex, false);
+            const fresh = cloneSymbolCell(name);
+            appendSymbolCellExtras(fresh, { mult, reelIndex, isEnhancerMini: false });
+            cell.replaceWith(fresh);
         }
     }
 }
@@ -1201,6 +1207,7 @@ function initMobileOptimizations() {
 async function initSlotAfterBooksReady() {
     initMobileOptimizations();
     await preloadImages();
+    initSymbolDomPool();
     initReels();
     setupEventListeners();
     updateBalance();
@@ -1378,6 +1385,77 @@ function symbolImageSrc(symbolName) {
     return `images/${name}.png`;
 }
 
+function normalizeDisplaySymbol(symbolName) {
+    return symbolName === 'split_wilds' ? 'split' : symbolName;
+}
+
+function reelTransformY(el, offsetPx) {
+    const y = Math.round(Number(offsetPx) || 0);
+    if (isMobileSlot) {
+        el.style.transform = `translate3d(0, -${y}px, 0)`;
+    } else {
+        el.style.transform = `translateY(-${y}px)`;
+    }
+}
+
+function appendExtrasHtml(cell, html) {
+    if (!html) return;
+    const tmp = document.createElement('template');
+    tmp.innerHTML = `<div>${html}</div>`;
+    const wrap = tmp.content.firstChild;
+    if (!wrap) return;
+    while (wrap.firstChild) {
+        cell.appendChild(wrap.firstChild);
+    }
+}
+
+function initSymbolDomPool() {
+    symbolTemplateByName.clear();
+    const useBgCache = isCoarsePointerDevice() || isEmbeddedSlot;
+
+    for (const sym of SYMBOLS) {
+        const cell = document.createElement('div');
+        cell.className = 'symbol';
+        cell.dataset.symbol = sym;
+
+        if (useBgCache) {
+            cell.classList.add('symbol--cached-bg');
+            cell.style.backgroundImage = `url(${symbolImageSrc(sym)})`;
+        } else {
+            const img = document.createElement('img');
+            img.src = symbolImageSrc(sym);
+            img.alt = sym;
+            img.loading = 'eager';
+            img.decoding = 'sync';
+            img.draggable = false;
+            cell.appendChild(img);
+        }
+
+        symbolTemplateByName.set(sym, cell);
+    }
+
+    let cacheRoot = document.getElementById('symbolBitmapCache');
+    if (!cacheRoot) {
+        cacheRoot = document.createElement('div');
+        cacheRoot.id = 'symbolBitmapCache';
+        cacheRoot.className = 'symbol-bitmap-cache';
+        cacheRoot.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(cacheRoot);
+    }
+    cacheRoot.replaceChildren();
+    for (const sym of SYMBOLS) {
+        const tpl = symbolTemplateByName.get(sym);
+        if (tpl) cacheRoot.appendChild(tpl.cloneNode(true));
+    }
+}
+
+function cloneSymbolCell(symbolName) {
+    const display = normalizeDisplaySymbol(symbolName);
+    const key = SYMBOLS.includes(display) ? display : symbolName;
+    const tpl = symbolTemplateByName.get(key) || symbolTemplateByName.get('high1');
+    return tpl ? tpl.cloneNode(true) : createSymbolElement(symbolName, 1);
+}
+
 function symbolImgTag(symbolName, extraAttrs = '') {
     const name = symbolName === 'split_wilds' ? 'split_wilds' : symbolName;
     return `<img src="${symbolImageSrc(name)}" alt="${name}" loading="eager" decoding="sync" draggable="false"${extraAttrs ? ` ${extraAttrs}` : ''}>`;
@@ -1412,6 +1490,7 @@ function preloadImages() {
         ),
     ).then(() => {
         symbolImagesPreload.done = true;
+        initSymbolDomPool();
     });
 
     return symbolImagesPreload.promise;
@@ -1434,22 +1513,13 @@ function initReels() {
         
         // Начальная позиция
         reelPositions[i] = 0;
-        reelContent.style.transform = 'translateY(0px)';
+        reelTransformY(reelContent, 0);
     }
 }
 
 // Создание элемента символа
 function createSymbolElement(symbolName, mult = 1) {
-    const div = document.createElement('div');
-    div.className = 'symbol';
-    const img = document.createElement('img');
-    img.src = `images/${symbolName}.png`;
-    img.alt = symbolName;
-    img.loading = 'eager';
-    img.decoding = 'sync';
-    img.draggable = false;
-    div.appendChild(img);
-
+    const div = cloneSymbolCell(symbolName);
     if (mult > 1) {
         const badge = document.createElement('span');
         badge.className = 'symbol-mult';
@@ -1457,6 +1527,19 @@ function createSymbolElement(symbolName, mult = 1) {
         div.appendChild(badge);
     }
     return div;
+}
+
+function appendSymbolCellExtras(cell, { mult, reelIndex, isEnhancerMini } = {}) {
+    const name = cell.dataset.symbol || '';
+    if (mult > 1 && name !== 'split_wilds') {
+        const badge = document.createElement('span');
+        badge.className = 'symbol-mult';
+        badge.textContent = `x${mult}`;
+        cell.appendChild(badge);
+    }
+    if (!isEnhancerMini && name === 'scatter' && isBonusGame) {
+        appendExtrasHtml(cell, scatterBonusExtraHtml(reelIndex));
+    }
 }
 
 // Настройка слушателей событий
@@ -2825,7 +2908,7 @@ function resetReelsToFinalPosition() {
         
         // Устанавливаем смещение только на нужную позицию
         const offset = reelPositions[i] * symbolHeight;
-        reelContent.style.transform = `translateY(-${offset}px)`;
+        reelTransformY(reelContent, offset);
         reelContent.style.transition = 'none'; // Убираем переход для мгновенного применения
     }
 }
@@ -2844,13 +2927,12 @@ function spinEnhancerReel(reelIndex, enhancerSymbolIndex, extraDurationMs = 0, s
         const symbolHeight = getSymbolHeight();
         const totalDuration = Math.max(1, SPIN_DURATION + (Number(extraDurationMs) || 0));
         
-        let htmlParts = [];
+        const stripFrag = document.createDocumentFragment();
         
-        // 1) Финальный символ (виден в конце): до резолва показываем split вместо split_wilds; xWays остаётся xWays до resolveXWays
         const rawFinalName = SYMBOLS[enhancerSymbolIndex] || enhancerSymbolIndex;
         const landingSymbolName = rawFinalName === 'split_wilds' ? 'split' : rawFinalName;
+        const landingCell = cloneSymbolCell(landingSymbolName);
 
-        let badgeHtml = '';
         const multEligible =
             resolvedBottomWeight === undefined
                 ? null
@@ -2858,19 +2940,18 @@ function spinEnhancerReel(reelIndex, enhancerSymbolIndex, extraDurationMs = 0, s
 
         if (multEligible != null && multEligible > 1 && landingSymbolName !== 'split' && landingSymbolName !== 'xWays') {
             if (!['wild', 'split'].includes(landingSymbolName) && [1, 2, 3].includes(reelIndex)) {
-                badgeHtml = `<span class="symbol-mult">x${multEligible}</span>`;
+                appendExtrasHtml(landingCell, `<span class="symbol-mult">x${multEligible}</span>`);
             }
         } else if (resolvedBottomWeight === undefined && isBonusGame && getBonusEnhancerReels().includes(reelIndex)) {
             if (!['xWays', 'wild', 'split'].includes(landingSymbolName)) {
                 if ([1, 2, 3].includes(reelIndex)) {
-                    badgeHtml = `<span class="symbol-mult">x${bonusEnhancerMults[reelIndex]}</span>`;
+                    appendExtrasHtml(landingCell, `<span class="symbol-mult">x${bonusEnhancerMults[reelIndex]}</span>`);
                 }
             }
         }
 
-        htmlParts.push(symbolCellHtml(landingSymbolName, badgeHtml));
+        stripFrag.appendChild(landingCell);
         
-        // 2) Рандомные символы
         let totalSpinSymbols = Number(forcedSpinSymbols) || 0;
         if (totalSpinSymbols <= 0) {
             const spinTime = Math.max(500, SPIN_DURATION - 500 + (Number(extraDurationMs) || 0));
@@ -2878,20 +2959,19 @@ function spinEnhancerReel(reelIndex, enhancerSymbolIndex, extraDurationMs = 0, s
             totalSpinSymbols = Math.max(1, Math.ceil(baseSpinSymbols * (spinTime / SPIN_DURATION)));
         }
         for (let i = 0; i < totalSpinSymbols; i++) {
-            const rndSymbol = getRandomSymbolName();
-            htmlParts.push(symbolCellHtml(rndSymbol));
+            stripFrag.appendChild(cloneSymbolCell(getRandomSymbolName()));
         }
         
-        // 3) Текущий символ (старый) - берем из DOM
         const currentImg = enhancerContent.querySelector('img');
-        const currentName = currentImg ? currentImg.alt : 'high1';
-        htmlParts.push(symbolCellHtml(currentName));
+        const currentBg = enhancerContent.querySelector('.symbol--cached-bg');
+        const currentName = currentImg?.alt || currentBg?.dataset?.symbol || 'high1';
+        stripFrag.appendChild(cloneSymbolCell(currentName));
         
         enhancerContent.style.transition = 'none';
         const startOffset = (1 + totalSpinSymbols) * symbolHeight;
-        enhancerContent.innerHTML = htmlParts.join('');
+        enhancerContent.replaceChildren(stripFrag);
         enhancerContent.getBoundingClientRect();
-        enhancerContent.style.transform = `translateY(-${startOffset}px)`;
+        reelTransformY(enhancerContent, startOffset);
         
         const delay = reelIndex * REEL_START_STAGGER_MS;
         
@@ -2955,10 +3035,10 @@ function spinEnhancerReel(reelIndex, enhancerSymbolIndex, extraDurationMs = 0, s
                     finished = elapsed >= controller.tDecelEnd;
                 }
 
-                enhancerContent.style.transform = `translateY(-${currentOffset}px)`;
+                reelTransformY(enhancerContent, currentOffset);
 
                 if (finished) {
-                    enhancerContent.style.transform = `translateY(0px)`;
+                    reelTransformY(enhancerContent, 0);
                     const enhancerEl = document.getElementById(`enhancer${reelIndex}`);
                     if (enhancerEl) enhancerEl.classList.remove('reel-slow-glow', 'scatter-glow');
                     resolve();
@@ -3017,23 +3097,22 @@ function spinReel(reelIndex, finalSymbols, extraDurationMs = 0, scrollVPxPerMs, 
         const currentSymbols = currentBoard[reelIndex];
         const currentMults = currentBoardMult[reelIndex];
         
-        let htmlParts = [];
+        const stripFrag = document.createDocumentFragment();
         let numVisible = Math.min(3, finalSymbols.length);
         
-        // 1) Финальные символы (будут видны в конце) — split_wilds как split до resolveSplits; множители из книги если переданы
+        // 1) Финальные символы (будут видны в конце)
         for (let i = 0; i < numVisible; i++) {
             const rawName = SYMBOLS[finalSymbols[i]];
             const displayName = rawName === 'split_wilds' ? 'split' : rawName;
-            let extraHtml = '';
+            const cell = cloneSymbolCell(displayName);
             const wm = finalWeightsRow?.[i];
             if (wm != null && Number(wm) > 1) {
-                extraHtml += `<span class="symbol-mult">x${wm}</span>`;
+                appendExtrasHtml(cell, `<span class="symbol-mult">x${wm}</span>`);
             }
             if (displayName === 'scatter' && isBonusGame) {
-                if (reelIndex === 4 && bonusScatterCount === 3) extraHtml += `<span class="scatter-plus">+1</span>`;
-                else if (reelIndex === 0 && bonusScatterCount === 4) extraHtml += `<span class="scatter-plus">+2</span>`;
+                appendExtrasHtml(cell, scatterBonusExtraHtml(reelIndex));
             }
-            htmlParts.push(symbolCellHtml(displayName, extraHtml));
+            stripFrag.appendChild(cell);
         }
         
         // 2) Рандомные символы для анимации
@@ -3043,28 +3122,29 @@ function spinReel(reelIndex, finalSymbols, extraDurationMs = 0, scrollVPxPerMs, 
             totalSpinSymbols = Math.max(1, Math.ceil(baseSpinSymbols * (totalDuration / SPIN_DURATION)));
         }
         for (let i = 0; i < totalSpinSymbols; i++) {
-            const rndSymbol = getRandomSymbolName();
-            htmlParts.push(symbolCellHtml(rndSymbol));
+            stripFrag.appendChild(cloneSymbolCell(getRandomSymbolName()));
         }
         
         // 3) Текущие символы (видны в начале)
         const numCurrent = Math.min(3, currentSymbols.length || 3);
         for (let i = 0; i < numCurrent; i++) {
-            const mult = currentMults?.[i] || 1;
-            let badge = mult > 1 ? `<span class="symbol-mult">x${mult}</span>` : '';
             const currentName = typeof currentSymbols[i] === 'number' ? SYMBOLS[currentSymbols[i]] : currentSymbols[i];
-            if (currentName === 'scatter' && isBonusGame) {
-                if (reelIndex === 4 && bonusScatterCount === 3) badge += `<span class="scatter-plus">+1</span>`;
-                else if (reelIndex === 0 && bonusScatterCount === 4) badge += `<span class="scatter-plus">+2</span>`;
+            const mult = currentMults?.[i] || 1;
+            const cell = cloneSymbolCell(currentName);
+            if (mult > 1) {
+                appendExtrasHtml(cell, `<span class="symbol-mult">x${mult}</span>`);
             }
-            htmlParts.push(symbolCellHtml(currentName, badge));
+            if (currentName === 'scatter' && isBonusGame) {
+                appendExtrasHtml(cell, scatterBonusExtraHtml(reelIndex));
+            }
+            stripFrag.appendChild(cell);
         }
         
         reelContent.style.transition = 'none';
         const startOffset = (numVisible + totalSpinSymbols) * symbolHeight;
-        reelContent.innerHTML = htmlParts.join('');
+        reelContent.replaceChildren(stripFrag);
         reelContent.getBoundingClientRect();
-        reelContent.style.transform = `translateY(-${startOffset}px)`;
+        reelTransformY(reelContent, startOffset);
         
         // Конечная позиция: 0 (финальные вверху ленты становятся видимыми)
         const finalOffset = 0;
@@ -3131,10 +3211,10 @@ function spinReel(reelIndex, finalSymbols, extraDurationMs = 0, scrollVPxPerMs, 
                     finished = elapsed >= controller.tDecelEnd;
                 }
 
-                reelContent.style.transform = `translateY(-${currentOffset}px)`;
+                reelTransformY(reelContent, currentOffset);
 
                 if (finished) {
-                    reelContent.style.transform = `translateY(${finalOffset}px)`;
+                    reelTransformY(reelContent, -finalOffset);
 
                     const scattersBefore = countScattersOnCurrentBoard();
 

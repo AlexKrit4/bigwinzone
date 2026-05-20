@@ -1165,6 +1165,15 @@ body::after {
 .enhancer-content {
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+}
+
+.symbol--cached-bg {
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-color: transparent;
 }
 
 html.mobile-slot .symbol img {
@@ -1173,7 +1182,19 @@ html.mobile-slot .symbol img {
 
 html.mobile-slot .reel-content,
 html.mobile-slot .enhancer-content {
-    transform: translateZ(0);
+    will-change: transform;
+}
+
+.symbol-bitmap-cache {
+    position: fixed;
+    left: -9999px;
+    top: 0;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
 }
 
 .spin-button {
