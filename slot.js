@@ -596,12 +596,44 @@ async function initBooksApiClient() {
             store.bookCount = Number(meta?.count) || 0;
             store.jackpotSeed = meta?.jackpotSeed || '';
         }
-        booksApiOnline = ALL_BOOK_STORES.some((s) => s.ready);
+        booksApiOnline = areAllBooksStoresReady();
         return booksApiOnline;
     } catch (err) {
         console.warn('[BOOK API] недоступен:', err);
+        booksApiOnline = false;
         return false;
     }
+}
+
+function areAllBooksStoresReady() {
+    return ALL_BOOK_STORES.every((s) => s.ready && s.bookCount > 0);
+}
+
+function getBooksReadinessReport() {
+    const apiHint = getBooksApiUrl('/api/health');
+    if (!booksApiOnline) {
+        const missing = ALL_BOOK_STORES
+            .filter((s) => !s.ready || s.bookCount <= 0)
+            .map((s) => `• ${s.fileName} (${s.bookCount || 0} записей)`);
+        return {
+            ok: false,
+            message:
+                'Сервер книг недоступен или загружены не все файлы.\n\n'
+                + `Проверьте books-server (порт 3847) и прокси /books-api.\n`
+                + `Health: ${apiHint}\n\n`
+                + (missing.length ? `Не готовы:\n${missing.join('\n')}` : 'Нет ответа от API.'),
+        };
+    }
+    return { ok: true, message: '' };
+}
+
+function formatBooksApiHint() {
+    const base = (typeof window.RAVE_BOOKS_API === 'string' ? window.RAVE_BOOKS_API : '').trim();
+    if (base) return base;
+    if (typeof location !== 'undefined' && location.port === '3000') {
+        return 'прокси Next.js → /books-api → 127.0.0.1:3847';
+    }
+    return 'http://127.0.0.1:3847';
 }
 
 async function fetchRandomBookFromApi(scatterGuarantee) {
@@ -1180,26 +1212,103 @@ function initSlotAfterBooksReady() {
     }
 }
 
+function setBooksBootUi({ status, error, showRetry, allowContinue, failed }) {
+    const statusEl = document.getElementById('booksBootStatus');
+    const errorEl = document.getElementById('booksBootError');
+    const retryBtn = document.getElementById('booksBootRetry');
+    const continueBtn = document.getElementById('booksBootContinue');
+    const screen = document.getElementById('booksBootScreen');
+
+    if (statusEl && status) statusEl.textContent = status;
+    if (errorEl) {
+        if (error) {
+            errorEl.hidden = false;
+            errorEl.textContent = error;
+        } else {
+            errorEl.hidden = true;
+            errorEl.textContent = '';
+        }
+    }
+    if (retryBtn) retryBtn.hidden = !showRetry;
+    if (continueBtn) continueBtn.disabled = !allowContinue;
+    if (screen) screen.classList.toggle('books-boot-screen--failed', Boolean(failed));
+}
+
+async function verifyBooksServerReady() {
+    setBooksBootProgress(0.2);
+    setBooksBootUi({
+        status: `Подключение к books-server (${formatBooksApiHint()})…`,
+        error: '',
+        showRetry: false,
+        allowContinue: false,
+        failed: false,
+    });
+
+    const ok = await initBooksApiClient();
+    setBooksBootProgress(ok ? 1 : 0.25);
+
+    if (ok) {
+        const total = ALL_BOOK_STORES.reduce((sum, s) => sum + (s.bookCount || 0), 0);
+        setBooksBootUi({
+            status: `Готово: ${ALL_BOOK_STORES.length} файлов, ${total.toLocaleString('ru-RU')} книг.`,
+            error: '',
+            showRetry: false,
+            allowContinue: true,
+            failed: false,
+        });
+        return true;
+    }
+
+    const report = getBooksReadinessReport();
+    setBooksBootUi({
+        status: 'Слот нельзя запустить без книг.',
+        error: report.message,
+        showRetry: true,
+        allowContinue: false,
+        failed: true,
+    });
+    return false;
+}
+
 async function bootBooksThenSlot() {
     const screen = document.getElementById('booksBootScreen');
     const continueBtn = document.getElementById('booksBootContinue');
+    const retryBtn = document.getElementById('booksBootRetry');
 
-    setBooksBootProgress(0.2);
-    await initBooksApiClient();
-    setBooksBootProgress(1);
-    if (continueBtn) continueBtn.disabled = false;
+    const ready = await verifyBooksServerReady();
+
+    if (retryBtn) {
+        retryBtn.addEventListener('click', () => {
+            void verifyBooksServerReady();
+        });
+    }
 
     if (!continueBtn) {
-        enterSlotFromBoot(screen);
+        if (ready) enterSlotFromBoot(screen);
         return;
     }
 
     continueBtn.addEventListener('click', () => {
+        if (!areAllBooksStoresReady()) {
+            const report = getBooksReadinessReport();
+            setBooksBootUi({
+                status: 'Слот нельзя запустить без книг.',
+                error: report.message,
+                showRetry: true,
+                allowContinue: false,
+                failed: true,
+            });
+            return;
+        }
         enterSlotFromBoot(screen);
     }, { once: true });
 }
 
 function enterSlotFromBoot(screen) {
+    if (!areAllBooksStoresReady()) {
+        console.error('[BOOK] enterSlotFromBoot заблокирован: книги не готовы');
+        return;
+    }
     document.body.classList.remove('slot-boot-lock');
     if (screen) {
         screen.classList.add('books-boot-screen--done');
@@ -1619,6 +1728,37 @@ async function spin() {
         return;
     }
 
+    const booksStore = getActiveBooksStore(scatterGuarantee);
+    let presetBookWhole = null;
+
+    if (!booksApiOnline || !booksStore.ready) {
+        alert(
+            'Книги не загружены. Слот не запускается без books-server.\n\n'
+            + `Проверьте: ${formatBooksApiHint()}\n`
+            + 'На VPS: pm2 status (books-server + rave-casino).',
+        );
+        return;
+    }
+
+    try {
+        presetBookWhole = await consumeQueuedForcedSeedBookFromApi(booksStore, scatterGuarantee);
+        if (!presetBookWhole && useRandomBookSpin) {
+            presetBookWhole = await fetchRandomBookFromApi(scatterGuarantee);
+        }
+    } catch (err) {
+        console.error('[BOOK API] ошибка запроса сида:', err);
+        presetBookWhole = null;
+    }
+
+    if (!presetBookWhole?.spin?.reel0) {
+        alert(
+            'Не удалось получить книгу для спина (RNG отключён).\n\n'
+            + `Файл: ${booksStore.fileName}\n`
+            + 'Перезапустите books-server или обновите страницу.',
+        );
+        return;
+    }
+
     // Списываем ставку с баланса
     if (casinoApiAvailable) {
         try {
@@ -1675,41 +1815,13 @@ async function spin() {
     // Сбрасываем данные о выигрыше из книги для этого спина
     window.currentSpinData = null;
 
-    let finalResult;
-    /** Базовый спин из books-seeds.txt (BOOKS_SEEDS_V2); фри из файла только если у записи есть полный хвост бонуса */
-    let playBaseSpinFromBooks = false;
-    let presetBookWhole = null;
-
-    const booksStore = getActiveBooksStore(scatterGuarantee);
-    const canPickBookForSpin =
-        booksApiOnline
-        && booksStore.ready
-        && !isBonusGame
-        && BOOK_SPIN_SCATTER_GUARANTEES.has(scatterGuarantee);
-
-    if (canPickBookForSpin) {
-        try {
-            presetBookWhole = await consumeQueuedForcedSeedBookFromApi(booksStore, scatterGuarantee);
-            if (!presetBookWhole && useRandomBookSpin) {
-                presetBookWhole = await fetchRandomBookFromApi(scatterGuarantee);
-            }
-        } catch (err) {
-            console.error('[BOOK API] ошибка запроса сида:', err);
-            presetBookWhole = null;
-        }
-    }
-
-    if (presetBookWhole?.spin?.reel0) {
-        playBaseSpinFromBooks = true;
-        finalResult = spinPresetToLandingResultIndices(presetBookWhole.spin);
-        buyJackpotPending = Boolean(
-            booksStore.jackpotSeed
-            && presetBookWhole.spin.seed === booksStore.jackpotSeed
-        );
-    } else {
-        buyJackpotPending = false;
-        finalResult = generateResult(scatterGuarantee);
-    }
+    /** Базовый спин только из книги (books-server); RNG для базы отключён */
+    const playBaseSpinFromBooks = true;
+    const finalResult = spinPresetToLandingResultIndices(presetBookWhole.spin);
+    buyJackpotPending = Boolean(
+        booksStore.jackpotSeed
+        && presetBookWhole.spin.seed === booksStore.jackpotSeed
+    );
 
     // Книга: без финальных весов на ленте — x2 над split и множитель xWays только после resolve
     await spinReels(finalResult, null);
@@ -1761,24 +1873,6 @@ async function spin() {
                 'checkWin=', probe.totalWin,
                 'seed=', presetBookWhole.spin.seed);
         }
-    } else if (!playBaseSpinFromBooks) {
-        const hadSplits = await resolveSplitsAndUpdateBoardAnimated();
-        if (hadSplits) {
-            await sleep(500);
-        }
-
-        const resolved = await resolveXWaysAndUpdateBoardAnimated();
-
-        if (resolved.hadXWays) {
-            await sleep(500);
-        }
-
-        afterTwoScatter = await maybeResolveExactlyTwoScatters(
-            resolved.namesGrid,
-            resolved.weightsGrid,
-            resolved.xWaysReplacementSymbol,
-            { protectReel1CenterScatter: scatterGuarantee === 1 }
-        );
     }
 
     setLinesCounter(calculateTotalLinesFromWeights(afterTwoScatter.weightsGrid));

@@ -16,9 +16,13 @@
 <body class="slot-boot-lock">
     <div id="booksBootScreen" class="books-boot-screen" role="dialog" aria-modal="true" aria-label="Загрузка">
         <div class="books-boot-card">
+            <p id="booksBootTitle" class="books-boot-title">Загрузка книг</p>
+            <p id="booksBootStatus" class="books-boot-status">Подключение к books-server…</p>
             <div class="books-boot-progress" aria-hidden="true">
                 <div id="booksBootProgressFill" class="books-boot-progress-fill" style="width: 0%"></div>
             </div>
+            <p id="booksBootError" class="books-boot-error" hidden></p>
+            <button type="button" id="booksBootRetry" class="books-boot-retry" hidden>Повторить</button>
             <button type="button" id="booksBootContinue" class="books-boot-continue" disabled>Продолжить</button>
         </div>
     </div>
