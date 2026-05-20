@@ -2,7 +2,11 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#04030a">
     <title>RAVE Slot - Nolimit City</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,15 +23,15 @@
         </div>
     </div>
 
-    <audio id="bgMusic" src="images/bg.ogg" loop preload="auto"></audio>
-    <audio id="bw1Music" src="images/bw1.ogg" preload="auto"></audio>
-    <audio id="bw2Music" src="images/bw2.ogg" preload="auto"></audio>
-    <audio id="bw3Music" src="images/bw3.ogg" preload="auto"></audio>
-    <audio id="bw4Music" src="images/bw4.ogg" preload="auto"></audio>
-    <audio id="bw5Music" src="images/bw5.ogg" preload="auto"></audio>
-    <audio id="bw6Music" src="images/bw6.ogg" preload="auto"></audio>
-    <audio id="bwEndMusic" src="images/bwend.ogg" preload="auto"></audio>
-    <audio id="maxwinMusic" src="images/maxwin.ogg" preload="auto"></audio>
+    <audio id="bgMusic" src="images/bg.ogg" loop preload="metadata"></audio>
+    <audio id="bw1Music" src="images/bw1.ogg" preload="none"></audio>
+    <audio id="bw2Music" src="images/bw2.ogg" preload="none"></audio>
+    <audio id="bw3Music" src="images/bw3.ogg" preload="none"></audio>
+    <audio id="bw4Music" src="images/bw4.ogg" preload="none"></audio>
+    <audio id="bw5Music" src="images/bw5.ogg" preload="none"></audio>
+    <audio id="bw6Music" src="images/bw6.ogg" preload="none"></audio>
+    <audio id="bwEndMusic" src="images/bwend.ogg" preload="none"></audio>
+    <audio id="maxwinMusic" src="images/maxwin.ogg" preload="none"></audio>
     <script>
         // Пустая строка = прокси /books-api через Next (порт 3000). Иначе прямой URL books-server.
         window.RAVE_BOOKS_API = window.RAVE_BOOKS_API
@@ -39,6 +43,13 @@
         <div class="header">
             <h1 class="header-title">RAVE</h1>
         </div>
+
+        <button
+            type="button"
+            id="mobileFsBtn"
+            class="mobile-fs-btn"
+            aria-label="На весь экран"
+            title="На весь экран">⛶</button>
 
         <button
             type="button"

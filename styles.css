@@ -1416,44 +1416,96 @@ table tr:hover {
     border-top: 1px solid var(--rave-border);
 }
 
+.mobile-fs-btn {
+    display: none;
+}
+
 @media (max-width: 768px) {
-        .win-overlay-amount {
-            font-size: 48px;
-        }
+    .win-overlay-amount {
+        font-size: 48px;
+    }
+
     .container {
-        padding: 15px;
+        padding: 10px 8px;
+        padding-bottom: calc(200px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .header {
+        margin-bottom: 0.5rem;
     }
 
     .header-title {
-        font-size: 2.25rem;
-        letter-spacing: 0.18em;
+        font-size: 1.65rem;
+        letter-spacing: 0.12em;
+        animation: none;
+        filter: none;
     }
 
-    :root { --symbol-size: 110px; }
+    :root {
+        --symbol-size: clamp(52px, 17.5vw, 92px);
+    }
 
     .game-container {
         flex-direction: column;
+        gap: 12px;
+        margin-bottom: 12px;
     }
 
-    .container {
-        padding-bottom: 220px;
+    .board-stack {
+        width: 100%;
+        max-width: 100%;
     }
 
     .info-button {
-        width: 56px;
-        height: 56px;
+        width: 48px;
+        height: 48px;
         border-radius: 12px;
+        top: auto;
+        bottom: calc(200px + env(safe-area-inset-bottom, 0px));
+    }
+
+    #debugBtn {
+        right: 58px !important;
+    }
+
+    .turbo-reels-btn {
+        bottom: calc(200px + env(safe-area-inset-bottom, 0px));
+        right: 12px;
+    }
+
+    .mobile-fs-btn {
+        display: flex;
+        position: absolute;
+        right: 68px;
+        bottom: calc(200px + env(safe-area-inset-bottom, 0px));
+        z-index: 56;
+        width: 48px;
+        height: 48px;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--rave-radius-md);
+        border: 1px solid var(--rave-border);
+        background: var(--rave-surface);
+        color: var(--rave-cyan);
+        font-size: 1.25rem;
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
     }
 
     .hud {
-        left: 15px;
-        right: 15px;
-        bottom: 15px;
-        height: 190px;
+        left: 10px;
+        right: 10px;
+        bottom: max(10px, env(safe-area-inset-bottom, 0px));
+        height: auto;
+        min-height: 168px;
     }
 
-    .hud-left {
-        left: 0;
+    .hud-left,
+    .hud-right {
+        position: relative;
+        left: auto;
+        right: auto;
     }
 
     .hud-center {
@@ -1461,17 +1513,92 @@ table tr:hover {
         right: 0;
         transform: none;
         align-items: center;
-    }
-
-    .hud-right {
-        right: 0;
+        position: relative;
     }
 
     .spin-button {
-        width: 100px;
-        height: 100px;
-        font-size: 0.9em;
+        width: 92px;
+        height: 92px;
+        font-size: 0.85em;
+        touch-action: manipulation;
     }
+
+    .bet-button,
+    .mod-button,
+    .bonus-continue-btn,
+    .max-win-continue-btn {
+        touch-action: manipulation;
+        min-height: 44px;
+    }
+
+    .corner-clock {
+        font-size: 0.7rem;
+        padding: 6px 8px;
+    }
+
+    .bonus-hud {
+        top: 72px;
+        left: 10px;
+    }
+}
+
+/* Touch / mobile performance */
+html.mobile-slot body::before,
+html.mobile-slot body::after {
+    animation: none;
+    opacity: 0.2;
+}
+
+html.mobile-slot .header-title {
+    animation: none;
+}
+
+html.mobile-slot .big-win-text,
+html.mobile-slot .max-win-busted {
+    animation: none;
+}
+
+html.mobile-slot .turbo-reels-btn,
+html.mobile-slot .info-button,
+html.mobile-slot .bet-button,
+html.mobile-slot .mod-panel,
+html.mobile-slot .lines-counter,
+html.mobile-slot .corner-clock {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+html.mobile-slot .bonus-modal,
+html.mobile-slot .modal-overlay {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+html.mobile-slot body {
+    min-height: 100dvh;
+    height: 100dvh;
+    overflow: hidden;
+    align-items: flex-start;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+}
+
+html.embedded-slot body {
+    min-height: 100%;
+    height: 100%;
+}
+
+html.embedded-slot .container {
+    padding-top: 6px;
+}
+
+html.embedded-slot .header-title {
+    font-size: 1.45rem;
+    letter-spacing: 0.1em;
+}
+
+html.embedded-slot #debugBtn {
+    display: none;
 }
 
 /* Экран загрузки перед слотом */

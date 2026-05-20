@@ -36,6 +36,11 @@ const REEL_STOP_STAGGER_FAST_MS = 100; // Турбо: быстрее остан�
 /** Турбо-режим: меньше пауза между остановками барабанов (кнопка ⚡). */
 let fastReelStopMode = false;
 
+/** Мобильный / touch: упрощённые эффекты и авто-масштаб. */
+let isMobileSlot = false;
+let isEmbeddedSlot = false;
+let mobileLayoutRaf = 0;
+
 function getReelStopStaggerMs() {
     return fastReelStopMode ? REEL_STOP_STAGGER_FAST_MS : REEL_STOP_STAGGER_MS;
 }
@@ -1066,7 +1071,100 @@ function setBooksBootProgress(overall) {
     if (fill) fill.style.width = `${pctInt}%`;
 }
 
+function isCoarsePointerDevice() {
+    try {
+        return window.matchMedia('(max-width: 900px), (hover: none) and (pointer: coarse)').matches;
+    } catch (_) {
+        return window.innerWidth <= 900;
+    }
+}
+
+function initMobileOptimizations() {
+    isEmbeddedSlot = window.self !== window.top
+        || /[?&]embed=1/.test(window.location.search);
+    isMobileSlot = isCoarsePointerDevice() || isEmbeddedSlot;
+
+    if (!isMobileSlot) return;
+
+    document.documentElement.classList.add('mobile-slot');
+    if (isEmbeddedSlot) document.documentElement.classList.add('embedded-slot');
+
+    try {
+        if (localStorage.getItem('raveFastReelStop') === null) {
+            fastReelStopMode = true;
+            localStorage.setItem('raveFastReelStop', '1');
+        }
+    } catch (_) {
+        fastReelStopMode = true;
+    }
+    syncTurboReelsBtn();
+
+    const applyLayout = () => {
+        const root = document.documentElement;
+        const board = document.querySelector('.board-stack');
+        const container = document.querySelector('.container');
+        if (!board || !container) return;
+
+        container.style.setProperty('--slot-scale', '1');
+        board.style.transform = '';
+        board.style.width = '';
+        board.style.marginBottom = '';
+
+        const vv = window.visualViewport;
+        const viewW = vv?.width ?? window.innerWidth;
+        const viewH = vv?.height ?? window.innerHeight;
+        const safeBottom = Number.parseFloat(
+            getComputedStyle(root).getPropertyValue('env(safe-area-inset-bottom)') || '0',
+        ) || 0;
+
+        const hudReserve = isEmbeddedSlot ? 168 : 200;
+        const availableH = Math.max(280, viewH - hudReserve - safeBottom - 24);
+        const availableW = viewW - 16;
+
+        const boardRect = board.getBoundingClientRect();
+        const naturalW = board.offsetWidth || boardRect.width || 1;
+        const naturalH = board.offsetHeight || boardRect.height || 1;
+        const scale = Math.min(1, availableW / naturalW, availableH / naturalH, 1.15);
+        const clamped = Math.max(0.42, Math.min(1, scale));
+
+        root.style.setProperty('--slot-scale', String(clamped));
+        if (clamped < 0.995) {
+            board.style.transform = `scale(${clamped})`;
+            board.style.transformOrigin = 'top center';
+            board.style.width = `${naturalW}px`;
+            board.style.marginLeft = 'auto';
+            board.style.marginRight = 'auto';
+            board.style.marginBottom = `${Math.round((1 - clamped) * naturalH * -0.35)}px`;
+        }
+    };
+
+    const scheduleLayout = () => {
+        if (mobileLayoutRaf) cancelAnimationFrame(mobileLayoutRaf);
+        mobileLayoutRaf = requestAnimationFrame(() => {
+            mobileLayoutRaf = 0;
+            applyLayout();
+        });
+    };
+
+    scheduleLayout();
+    document.addEventListener('rave-mobile-layout', scheduleLayout);
+    window.addEventListener('resize', scheduleLayout, { passive: true });
+    window.visualViewport?.addEventListener('resize', scheduleLayout, { passive: true });
+    window.visualViewport?.addEventListener('scroll', scheduleLayout, { passive: true });
+
+    const fsBtn = document.getElementById('mobileFsBtn');
+    if (fsBtn && !fsBtn.dataset.bound) {
+        fsBtn.dataset.bound = '1';
+        fsBtn.addEventListener('click', () => {
+            try {
+                window.parent.postMessage({ type: 'RAVE_SLOT_REQUEST_FULLSCREEN' }, window.location.origin);
+            } catch (_) {}
+        });
+    }
+}
+
 function initSlotAfterBooksReady() {
+    initMobileOptimizations();
     preloadImages();
     initReels();
     setupEventListeners();
@@ -1075,6 +1173,11 @@ function initSlotAfterBooksReady() {
     initBackgroundMusic();
     initAudio();
     initCornerClock();
+    if (isMobileSlot) {
+        requestAnimationFrame(() => {
+            document.dispatchEvent(new Event('rave-mobile-layout'));
+        });
+    }
 }
 
 async function bootBooksThenSlot() {
@@ -1193,8 +1296,8 @@ function createSymbolElement(symbolName, mult = 1) {
     const img = document.createElement('img');
     img.src = `images/${symbolName}.png`;
     img.alt = symbolName;
-    img.loading = 'eager'; // Добавляем eager загрузку
-    img.decoding = 'sync'; // Синхронное декодирование
+    img.loading = isMobileSlot ? 'lazy' : 'eager';
+    img.decoding = isMobileSlot ? 'async' : 'sync';
     div.appendChild(img);
 
     if (mult > 1) {
@@ -1844,7 +1947,7 @@ async function maybeResolveExactlyTwoScatters(
             strip.style.left = '0';
             strip.style.top = '0';
             strip.style.width = '100%';
-            strip.style.willChange = 'transform';
+            if (!isMobileSlot) strip.style.willChange = 'transform';
 
             strip.innerHTML = [
                 createSpinItemHtml(finalShowName, cellHeight),
