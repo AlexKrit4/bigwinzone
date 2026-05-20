@@ -630,10 +630,10 @@ function getBooksReadinessReport() {
 function formatBooksApiHint() {
     const base = (typeof window.RAVE_BOOKS_API === 'string' ? window.RAVE_BOOKS_API : '').trim();
     if (base) return base;
-    if (typeof location !== 'undefined' && location.port === '3000') {
-        return 'прокси Next.js → /books-api → 127.0.0.1:3847';
+    if (typeof location !== 'undefined') {
+        return `${location.origin}/books-api → books-server :3847`;
     }
-    return 'http://127.0.0.1:3847';
+    return '/books-api';
 }
 
 async function fetchRandomBookFromApi(scatterGuarantee) {

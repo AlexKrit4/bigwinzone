@@ -37,9 +37,10 @@
     <audio id="bwEndMusic" src="images/bwend.ogg" preload="none"></audio>
     <audio id="maxwinMusic" src="images/maxwin.ogg" preload="none"></audio>
     <script>
-        // Пустая строка = прокси /books-api через Next (порт 3000). Иначе прямой URL books-server.
+        // Пустая строка = /books-api на том же домене (Next → books-server :3847).
+        // Прямой :3847 только при локальном server.js на порту 3333.
         window.RAVE_BOOKS_API = window.RAVE_BOOKS_API
-            || (location.port === '3000' ? '' : 'http://127.0.0.1:3847');
+            || (location.port === '3333' ? 'http://127.0.0.1:3847' : '');
     </script>
     
     <div class="container">
