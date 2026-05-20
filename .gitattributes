@@ -1,0 +1,4 @@
+# Large seed files (>50 MB) — Git LFS on GitHub
+books-seeds-buy-scatter3.txt filter=lfs diff=lfs merge=lfs -text
+books-seeds-buy-scatter4.txt filter=lfs diff=lfs merge=lfs -text
+books-seeds-buy-scatter5.txt filter=lfs diff=lfs merge=lfs -text

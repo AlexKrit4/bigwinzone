@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAVE Slot - Nolimit City</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Russo+One&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="slot-boot-lock">
+    <div id="booksBootScreen" class="books-boot-screen" role="dialog" aria-modal="true" aria-label="Загрузка">
+        <div class="books-boot-card">
+            <div class="books-boot-progress" aria-hidden="true">
+                <div id="booksBootProgressFill" class="books-boot-progress-fill" style="width: 0%"></div>
+            </div>
+            <button type="button" id="booksBootContinue" class="books-boot-continue" disabled>Продолжить</button>
+        </div>
+    </div>
+
+    <audio id="bgMusic" src="images/bg.ogg" loop preload="auto"></audio>
+    <audio id="bw1Music" src="images/bw1.ogg" preload="auto"></audio>
+    <audio id="bw2Music" src="images/bw2.ogg" preload="auto"></audio>
+    <audio id="bw3Music" src="images/bw3.ogg" preload="auto"></audio>
+    <audio id="bw4Music" src="images/bw4.ogg" preload="auto"></audio>
+    <audio id="bw5Music" src="images/bw5.ogg" preload="auto"></audio>
+    <audio id="bw6Music" src="images/bw6.ogg" preload="auto"></audio>
+    <audio id="bwEndMusic" src="images/bwend.ogg" preload="auto"></audio>
+    <audio id="maxwinMusic" src="images/maxwin.ogg" preload="auto"></audio>
+    <script>
+        // Пустая строка = прокси /books-api через Next (порт 3000). Иначе прямой URL books-server.
+        window.RAVE_BOOKS_API = window.RAVE_BOOKS_API
+            || (location.port === '3000' ? '' : 'http://127.0.0.1:3847');
+    </script>
+    
+    <div class="container">
+        <div class="corner-clock" id="cornerClock" aria-label="Текущее время">--:--:--</div>
+        <div class="header">
+            <h1 class="header-title">RAVE</h1>
+        </div>
+
+        <button
+            type="button"
+            id="turboReelsBtn"
+            class="turbo-reels-btn"
+            aria-pressed="false"
+            aria-label="Быстрая остановка барабанов"
+            title="Быстрая остановка барабанов (⚡)">
+            <svg class="turbo-reels-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M13 2L4 14h7l-1 8 10-14h-7l0-6z" fill="currentColor"/>
+            </svg>
+        </button>
+
+        <div class="game-container">
+            <!-- Big Win Overlay -->
+            <div class="big-win-overlay" id="bigWinOverlay" style="display: none;">
+                <div class="big-win-text" id="bigWinText">BIG WIN!</div>
+                <div class="big-win-amount" id="bigWinAmount">0.00</div>
+            </div>
+
+            <!-- Max Win / BUSTED (потолок 41500× базовой ставки) -->
+            <div class="max-win-overlay" id="maxWinOverlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="maxWinCounter">
+                <div class="max-win-counter" id="maxWinCounter">0.00</div>
+                <div class="max-win-busted" id="maxWinBusted" style="display: none;">BUSTED!</div>
+                <button type="button" class="max-win-continue-btn" id="maxWinContinueBtn" style="display: none;">Продолжить</button>
+            </div>
+
+            <button class="info-button" id="paytableBtn" aria-label="Информация">
+                <span class="info-icon">i</span>
+            </button>
+
+            <button class="info-button" id="debugBtn" aria-label="Отладка" style="right: 65px;">
+                <span class="info-icon">#</span>
+            </button>
+
+            <div class="board-stack">
+                <div class="board-top">
+                    <div class="lines-counter" id="linesCounter">Линий: 243</div>
+                </div>
+                <div class="reels-wrapper">
+                <div class="win-overlay" id="winOverlay" style="display: none;">
+                    <div class="win-overlay-amount" id="winOverlayAmount">0.00</div>
+                    <div class="win-overlay-lines" id="winOverlayLines">Линий: 0</div>
+                </div>
+                <div class="reels">
+                    <div class="reel" id="reel0">
+                        <div class="reel-content" style="transform: translateY(0)">
+                            <!-- Символы будут добавлены JS -->
+                        </div>
+                    </div>
+                    <div class="reel" id="reel1">
+                        <div class="reel-content" style="transform: translateY(0)">
+                        </div>
+                    </div>
+                    <div class="reel" id="reel2">
+                        <div class="reel-content" style="transform: translateY(0)">
+                        </div>
+                    </div>
+                    <div class="reel" id="reel3">
+                        <div class="reel-content" style="transform: translateY(0)">
+                        </div>
+                    </div>
+                    <div class="reel" id="reel4">
+                        <div class="reel-content" style="transform: translateY(0)">
+                        </div>
+                    </div>
+                </div>
+                <div class="enhancers" id="enhancers">
+                    <div class="enhancer" id="enhancer0"><div class="enhancer-content" style="transform: translateY(0)"></div></div>
+                    <div class="enhancer" id="enhancer1"><div class="enhancer-content" style="transform: translateY(0)"></div></div>
+                    <div class="enhancer" id="enhancer2"><div class="enhancer-content" style="transform: translateY(0)"></div></div>
+                    <div class="enhancer" id="enhancer3"><div class="enhancer-content" style="transform: translateY(0)"></div></div>
+                    <div class="enhancer" id="enhancer4"><div class="enhancer-content" style="transform: translateY(0)"></div></div>
+                </div>
+            </div>
+            </div>
+
+            <!-- Бонусное окно -->
+            <div class="bonus-modal" id="bonusModal" style="display: none;">
+                <div class="bonus-content">
+                    <div class="bonus-title" id="bonusTitle">3 скаттера!</div>
+                    <div class="bonus-description" id="bonusDescription">Вы выиграли 7 фри спинов!</div>
+                    <button class="bonus-continue-btn" id="bonusContinueBtn">Продолжить</button>
+                </div>
+            </div>
+
+            <!-- Фри спины счётчик и выигрыш -->
+            <div class="bonus-hud" id="bonusHud" style="display: none;">
+                <div class="bonus-spins-left" id="bonusSpinsLeft">Фри спинов: 0</div>
+                <div class="bonus-total-win" id="bonusTotalWin">Итого выигрыш: 0.00</div>
+            </div>
+
+            <!-- Модификатор показ -->
+            <div class="bonus-modifier-display" id="bonusModifierDisplay" style="display: none;">
+                <div class="modifier-name" id="modifierName">SPECCHAIN</div>
+            </div>
+
+            <div class="spin-column">
+                <button class="mod-button" id="modBtn" aria-label="Модификаторы ставок">
+                    <span>mod.</span>
+                </button>
+
+                <div class="mod-panel" id="modPanel" style="display: none;">
+                    <button class="mod-option" id="modScatter1" type="button" aria-pressed="false">
+                        <img src="images/scatter.png" alt="scatter" class="mod-option-icon">
+                        <span class="mod-option-text">1 скаттер (2-й барабан) ×1.2</span>
+                    </button>
+
+                    <button class="mod-option" id="modScatter3" type="button" aria-pressed="false">
+                        <img src="images/scatter.png" alt="scatter" class="mod-option-icon">
+                        <span class="mod-option-text">3 скаттера ×68</span>
+                    </button>
+
+                    <button class="mod-option" id="modScatter4" type="button" aria-pressed="false">
+                        <img src="images/scatter.png" alt="scatter" class="mod-option-icon">
+                        <span class="mod-option-text">4 скаттера ×140</span>
+                    </button>
+
+                    <button class="mod-option" id="modScatter5" type="button" aria-pressed="false">
+                        <img src="images/scatter.png" alt="scatter" class="mod-option-icon">
+                        <span class="mod-option-text">5 скаттеров ×522</span>
+                    </button>
+
+                    <button class="mod-option" id="modScatter202" type="button" aria-pressed="false">
+                        <img src="images/scatter.png" alt="scatter" class="mod-option-icon">
+                        <span class="mod-option-text">Бонус 3-5 скаттеров ×202</span>
+                    </button>
+                </div>
+
+                <button class="spin-button" id="spinBtn">
+                    <span>СПИН</span>
+                </button>
+
+                <button class="skip-button spin-hidden" id="skipBtn" aria-label="Ускорить" aria-disabled="true" type="button">
+                    <span class="skip-icon">■</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Модальное окно выбора ставки -->
+        <div class="modal-overlay" id="betModal" style="display: none;">
+            <div class="modal bet-modal">
+                <div class="modal-header">
+                    <div class="modal-title">ВЫБЕРЕТЕ СТАВКУ</div>
+                    <button class="modal-close" id="betModalClose" aria-label="Закрыть">✕</button>
+                </div>
+                <div class="modal-body bet-options-grid" id="betOptionsGrid">
+                    <!-- Заполняется из JS -->
+                </div>
+            </div>
+        </div>
+
+        <div class="hud">
+            <div class="hud-item hud-left">
+                <div class="bet-note" id="betNote" style="display: none;"></div>
+                <label>Ставка</label>
+                <button class="bet-button" id="betBtn">
+                    <svg class="coin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M12 6v12"></path>
+                        <path d="M9.5 9h3a2.5 2.5 0 0 1 0 5h-1a2.5 2.5 0 0 0 0 5h3"></path>
+                        <path d="M9.5 15h3"></path>
+                    </svg>
+                    <span id="currentBetValue">1.00</span>
+                </button>
+            </div>
+            <div class="hud-item hud-center" id="winHud" style="display: none;">
+                <label>Выигрыш</label>
+                <span id="winAmount">0.00</span>
+            </div>
+            <div class="hud-item hud-right">
+                <label>Баланс</label>
+                <span id="balance">1000.00</span>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="modal-overlay" id="paytableModal" style="display: none;">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">Таблица выплат</div>
+                <button class="modal-close" id="paytableClose" aria-label="Закрыть">✕</button>
+            </div>
+            <div class="modal-body" id="paytableContent">
+                <div class="modal-stats">Линий: 243 | RTP: тестовое | Волатильность: Высокая</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Символ</th>
+                            <th>3 шт</th>
+                            <th>4 шт</th>
+                            <th>5 шт</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="low-symbol">
+                            <td><img src="images/low1.png" alt="LOW1" class="paytable-icon"></td>
+                            <td>0.1x</td>
+                            <td>0.2x</td>
+                            <td>0.5x</td>
+                        </tr>
+                        <tr class="low-symbol">
+                            <td><img src="images/low2.png" alt="LOW2" class="paytable-icon"></td>
+                            <td>0.1x</td>
+                            <td>0.2x</td>
+                            <td>0.6x</td>
+                        </tr>
+                        <tr class="low-symbol">
+                            <td><img src="images/low3.png" alt="LOW3" class="paytable-icon"></td>
+                            <td>0.1x</td>
+                            <td>0.2x</td>
+                            <td>0.7x</td>
+                        </tr>
+                        <tr class="low-symbol">
+                            <td><img src="images/low4.png" alt="LOW4" class="paytable-icon"></td>
+                            <td>0.2x</td>
+                            <td>0.3x</td>
+                            <td>0.8x</td>
+                        </tr>
+                        <tr class="low-symbol">
+                            <td><img src="images/low5.png" alt="LOW5" class="paytable-icon"></td>
+                            <td>0.2x</td>
+                            <td>0.3x</td>
+                            <td>0.9x</td>
+                        </tr>
+                        <tr class="high-symbol">
+                            <td><img src="images/high1.png" alt="HIGH1" class="paytable-icon"></td>
+                            <td>0.3x</td>
+                            <td>0.4x</td>
+                            <td>1x</td>
+                        </tr>
+                        <tr class="high-symbol">
+                            <td><img src="images/high2.png" alt="HIGH2" class="paytable-icon"></td>
+                            <td>0.3x</td>
+                            <td>0.4x</td>
+                            <td>1.5x</td>
+                        </tr>
+                        <tr class="high-symbol">
+                            <td><img src="images/high3.png" alt="HIGH3" class="paytable-icon"></td>
+                            <td>0.4x</td>
+                            <td>0.5x</td>
+                            <td>2.5x</td>
+                        </tr>
+                        <tr class="high-symbol">
+                            <td><img src="images/high4.png" alt="HIGH4" class="paytable-icon"></td>
+                            <td>0.4x</td>
+                            <td>0.6x</td>
+                            <td>3x</td>
+                        </tr>
+                        <tr class="high-symbol">
+                            <td><img src="images/high5.png" alt="HIGH5" class="paytable-icon"></td>
+                            <td>0.5x</td>
+                            <td>0.75x</td>
+                            <td>6x</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Модальное окно для отладки (вне контейнера) -->
+    <div class="modal-overlay debug-modal-overlay" id="debugModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">Отладка</div>
+                <button class="modal-close" id="debugModalClose" aria-label="Закрыть">✕</button>
+            </div>
+            <div class="modal-body">
+                <details style="margin-bottom:16px;color:var(--rave-text);">
+                    <summary style="cursor:pointer;font-weight:600;margin-bottom:8px;color:var(--rave-text);">Книги спинов (base / mod / buy)</summary>
+                    <label style="display:flex;gap:10px;align-items:center;margin:10px 0;font-size:0.92rem;color:var(--rave-text-muted);">
+                        <input type="checkbox" id="useBooksRandomSpin" checked>
+                        <span>На каждый спин — случайный seed-книги</span>
+                    </label>
+                    <label style="display:block;margin-bottom:6px;font-size:0.9rem;color:var(--rave-text-muted);">
+                        Принудительный seed (первая колонка строки BOOKS_SEEDS_V2):
+                    </label>
+                    <input type="text" id="debugForcedSeedInput" placeholder="например rv_0_bnan1o" autocomplete="off"
+                           style="width:100%;padding:10px;margin-bottom:8px;background:var(--rave-surface);border:1px solid var(--rave-border);border-radius:8px;color:var(--rave-text);font-size:0.95rem;">
+                    <button type="button" id="queueForcedSeedBtn" class="bonus-continue-btn" style="width:100%;background:#5f6fde;">
+                        Следующий базовый спин по этому seed
+                    </button>
+                    <p style="margin-top:10px;font-size:0.8rem;line-height:1.35;color:var(--rave-text-muted);">
+                        Без mod: books-seeds.txt (rv_). Mod «1 scatter» 1.2×: books-seeds-mod-scatter1.txt (rvm1_). Покупка бонуса 3/4/5 scatter 68×/140×/522×: books-seeds-buy-scatter3/4/5.txt (rvb3_/rvb4_/rvb5_). Бонус из файла при полной серии фри в строке.
+                    </p>
+                </details>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--rave-text-muted);">Тест Big Win (x от ставки):</label>
+                    <input type="number" id="debugBigWinInput" min="1" placeholder="Введите x (например, 1000)" 
+                           style="width: 100%; padding: 10px; background: var(--rave-surface); border: 1px solid var(--rave-border); border-radius: 8px; color: var(--rave-text); font-size: 1rem;">
+                </div>
+                <button id="playBigWinBtn" class="bonus-continue-btn" style="width: 100%; background: var(--rave-pink);">
+                    Запуск Big Win
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="slot.js"></script>
+</body>
+</html>
