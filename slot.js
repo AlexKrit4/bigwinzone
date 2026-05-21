@@ -109,7 +109,7 @@ function getBonusEnhancerReels() {
     return [1, 2, 3];
 }
 
-let balance = 1000.00; // начальный баланс игрока
+let balance = 0; // баланс с сервера (/api/balance)
 let currentBaseBet = 1.00; // ставка
 let isSpinning = false;
 let reelStops = []; // конечные позиции для каждого барабана

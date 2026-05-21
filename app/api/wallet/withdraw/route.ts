@@ -1,0 +1,98 @@
+import { WithdrawalStatus } from "@prisma/client";
+import { NextResponse } from "next/server";
+import { getUserIdFromCookie } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { debitUserBalance } from "@/lib/wallet";
+
+export async function GET() {
+  const userId = await getUserIdFromCookie();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const items = await prisma.withdrawalRequest.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: 30,
+    select: {
+      id: true,
+      amount: true,
+      payoutTo: true,
+      status: true,
+      userNote: true,
+      adminNote: true,
+      createdAt: true,
+      processedAt: true,
+    },
+  });
+
+  return NextResponse.json({ withdrawals: items });
+}
+
+export async function POST(req: Request) {
+  const userId = await getUserIdFromCookie();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await req.json().catch(() => null);
+  const amount = Number(body?.amount ?? 0);
+  const payoutTo = String(body?.payoutTo ?? "").trim();
+  const userNote = String(body?.note ?? "").trim().slice(0, 500);
+
+  if (!Number.isFinite(amount) || amount < 100) {
+    return NextResponse.json(
+      { error: "Минимальная сумма вывода — 100 ₽" },
+      { status: 400 },
+    );
+  }
+
+  if (payoutTo.length < 8) {
+    return NextResponse.json(
+      { error: "Укажите кошелёк ЮMoney (номер или телефон)" },
+      { status: 400 },
+    );
+  }
+
+  const pending = await prisma.withdrawalRequest.count({
+    where: { userId, status: WithdrawalStatus.PENDING },
+  });
+  if (pending > 0) {
+    return NextResponse.json(
+      { error: "У вас уже есть заявка на вывод в обработке" },
+      { status: 409 },
+    );
+  }
+
+  try {
+    const withdrawal = await prisma.$transaction(async (tx) => {
+      await debitUserBalance(tx, userId, amount, "WITHDRAW_HOLD", undefined, "Заявка на вывод");
+
+      return tx.withdrawalRequest.create({
+        data: {
+          userId,
+          amount,
+          payoutTo,
+          userNote: userNote || null,
+          status: WithdrawalStatus.PENDING,
+        },
+      });
+    });
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { balance: true },
+    });
+
+    return NextResponse.json({
+      withdrawal: { id: withdrawal.id, status: withdrawal.status },
+      balance: Number(user?.balance ?? 0),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "INSUFFICIENT_FUNDS") {
+      return NextResponse.json({ error: "Недостаточно средств" }, { status: 400 });
+    }
+    console.error("[withdraw]", err);
+    return NextResponse.json({ error: "Не удалось создать заявку" }, { status: 500 });
+  }
+}

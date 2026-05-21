@@ -7,6 +7,7 @@ export type AuthUser = {
   email: string;
   username: string;
   balance: number;
+  role?: string;
 };
 
 type AuthModalProps = {

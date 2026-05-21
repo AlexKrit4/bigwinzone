@@ -1,12 +1,17 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { AuthModal, AuthUser } from "@/components/AuthModal";
+import { WalletModal } from "@/components/WalletModal";
 
 export function Header() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "register" | null>(null);
+  const [walletOpen, setWalletOpen] = useState(false);
+  const [walletTab, setWalletTab] = useState<"deposit" | "withdraw" | "promo">(
+    "deposit",
+  );
 
   async function refreshMe() {
     const res = await fetch("/api/auth/me", { credentials: "include" });
@@ -58,6 +63,31 @@ export function Header() {
                 <span>{user.username}</span>
                 <strong>{user.balance.toFixed(2)}</strong>
               </div>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => {
+                  setWalletTab("deposit");
+                  setWalletOpen(true);
+                }}
+              >
+                Депозит
+              </button>
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => {
+                  setWalletTab("withdraw");
+                  setWalletOpen(true);
+                }}
+              >
+                Вывод
+              </button>
+              {user.role === "ADMIN" && (
+                <Link href="/admin" className="ghost-btn">
+                  Админ
+                </Link>
+              )}
               <button className="ghost-btn" onClick={logout}>
                 Выйти
               </button>
@@ -79,6 +109,19 @@ export function Header() {
           mode={authMode}
           onClose={() => setAuthMode(null)}
           onAuthed={setUser}
+        />
+      )}
+      {walletOpen && user && (
+        <WalletModal
+          user={user}
+          initialTab={walletTab}
+          onClose={() => setWalletOpen(false)}
+          onBalance={(balance) => {
+            setUser((u) => (u ? { ...u, balance } : u));
+            window.dispatchEvent(
+              new CustomEvent("casino:balance", { detail: { balance } }),
+            );
+          }}
         />
       )}
     </>

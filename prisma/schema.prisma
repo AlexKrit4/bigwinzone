@@ -7,12 +7,115 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum DepositStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
   username     String   @unique
   passwordHash String
-  balance      Float    @default(1000.00)
+  role         UserRole @default(USER)
+  balance      Float    @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  deposits            Deposit[]
+  withdrawals         WithdrawalRequest[]
+  ledger              BalanceLedger[]
+  promoRedemptions    PromoRedemption[]
+  processedWithdrawals WithdrawalRequest[] @relation("WithdrawalProcessor")
+}
+
+model Deposit {
+  id          String        @id @default(cuid())
+  userId      String
+  amount      Float
+  currency    String        @default("RUB")
+  status      DepositStatus @default(PENDING)
+  provider    String        @default("yoomoney")
+  label       String        @unique
+  externalId  String?       @unique
+  createdAt   DateTime      @default(now())
+  completedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+model WithdrawalRequest {
+  id            String           @id @default(cuid())
+  userId        String
+  amount        Float
+  payoutTo      String
+  status        WithdrawalStatus @default(PENDING)
+  userNote      String?
+  adminNote     String?
+  processedById String?
+  createdAt     DateTime         @default(now())
+  processedAt   DateTime?
+
+  user      User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  processedBy User? @relation("WithdrawalProcessor", fields: [processedById], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+model PromoCode {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  bonusAmount Float
+  maxUses     Int?
+  usedCount   Int       @default(0)
+  active      Boolean   @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  redemptions PromoRedemption[]
+}
+
+model PromoRedemption {
+  id          String   @id @default(cuid())
+  promoCodeId String
+  userId      String
+  createdAt   DateTime @default(now())
+
+  promoCode PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([promoCodeId, userId])
+}
+
+model BalanceLedger {
+  id           String   @id @default(cuid())
+  userId       String
+  amount       Float
+  balanceAfter Float
+  type         String
+  refId        String?
+  note         String?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([type])
 }

@@ -31,6 +31,7 @@ export async function POST(req: Request) {
         email: user.email,
         username: user.username,
         balance: Number(user.balance),
+        role: user.role,
       },
     });
   } catch (error) {

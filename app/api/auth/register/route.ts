@@ -33,8 +33,8 @@ export async function POST(req: Request) {
 
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await prisma.user.create({
-      data: { email, username, passwordHash },
-      select: { id: true, email: true, username: true, balance: true },
+      data: { email, username, passwordHash, balance: 0 },
+      select: { id: true, email: true, username: true, balance: true, role: true },
     });
 
     await setAuthCookie(signUserToken(user.id));
@@ -45,6 +45,7 @@ export async function POST(req: Request) {
         email: user.email,
         username: user.username,
         balance: Number(user.balance),
+        role: user.role,
       },
     });
   } catch (error) {
