@@ -5,18 +5,11 @@ import { findDepositForNotification } from "@/lib/resolve-deposit";
 import {
   describeYooMoneyVerification,
   getYooMoneyConfig,
+  parseYooMoneyFormBody,
   verifyYooMoneyNotification,
 } from "@/lib/yoomoney";
 
-const WEBHOOK_BUILD = "20260520-match-by-amount";
-
-function formToRecord(form: FormData): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [key, value] of form.entries()) {
-    out[key] = String(value);
-  }
-  return out;
-}
+const WEBHOOK_BUILD = "20260521-sign-flex";
 
 /** Проверка, что URL доступен снаружи (curl / кнопка «Протестировать» в ЮMoney). */
 export async function GET() {
@@ -31,13 +24,13 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const form = await req.formData().catch(() => null);
-  if (!form) {
-    console.error("[yoomoney] POST rejected: no form body");
+  const rawBody = await req.text().catch(() => "");
+  if (!rawBody.trim()) {
+    console.error("[yoomoney] POST rejected: empty body");
     return new NextResponse("Bad request", { status: 400 });
   }
 
-  const allParams = formToRecord(form);
+  const allParams = parseYooMoneyFormBody(rawBody);
   const label = allParams.label ?? "";
   const operationId = allParams.operation_id ?? "";
 
@@ -56,7 +49,13 @@ export async function POST(req: Request) {
 
   if (allParams.test_notification === "true") {
     if (!verifyYooMoneyNotification(allParams)) {
-      console.error("[yoomoney] test notification: invalid signature");
+      const check = describeYooMoneyVerification(allParams);
+      console.error(
+        "[yoomoney] test notification: invalid signature",
+        check.signPreview,
+        `secretLen=${check.secretLen}`,
+        `mode=${check.signMode ?? "none"}`,
+      );
       return new NextResponse("Invalid hash", { status: 403 });
     }
     console.log("[yoomoney] test notification: OK");
@@ -71,7 +70,8 @@ export async function POST(req: Request) {
       WEBHOOK_BUILD,
       `label=${label}`,
       `secretLen=${secret?.length ?? 0}`,
-      `sign=${check.hasSign ? (check.signOk ? "ok" : "fail") : "none"}`,
+      check.signPreview,
+      `sign=${check.hasSign ? (check.signOk ? `ok(${check.signMode})` : "fail") : "none"}`,
       `sha1=${check.hasSha1 ? (check.sha1Ok ? "ok" : "fail") : "none"}`,
     );
     return new NextResponse("Invalid hash", { status: 403 });

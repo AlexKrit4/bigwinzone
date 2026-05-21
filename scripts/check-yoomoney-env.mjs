@@ -9,7 +9,11 @@ import { resolve } from "path";
 
 function cleanEnv(value) {
   if (!value) return "";
-  return value.trim().replace(/^['"]|['"]$/g, "");
+  return value
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .replace(/\r$/g, "")
+    .replace(/^['"]|['"]$/g, "");
 }
 
 function loadEnvFile(path) {
@@ -83,10 +87,17 @@ console.log(
 );
 if (!signOk && !sha1Ok) {
   console.log(
-    "\nСекрет в .env НЕ совпадает с тестовым secret123 — это нормально.",
-    "\nСкопируйте секрет из кошелька → HTTP-уведомления (не из OAuth-приложения).",
-    "\nБез кавычек: YOOMONEY_SECRET=ваш_ключ",
+    "\nСекрет в .env НЕ совпадает с тестовым secret123 — это нормально для боевого ключа.",
+    "\nСкопируйте секрет из: https://yoomoney.ru/transfer/myservices/http-notification",
+    "\nВ .env: YOOMONEY_SECRET=ключ (без кавычек и пробелов)",
+    "\nПосле правки: pm2 restart rave-casino --update-env",
   );
 } else {
-  console.log("\nВнимание: у вас в .env стоит тестовый secret123 — замените на секрет из кошелька.");
+  console.log(
+    "\nВ .env стоит тестовый secret123 из документации — замените на секрет из кошелька.",
+  );
+}
+
+if (secret.length < 8) {
+  console.warn("Подозрительно короткий секрет — проверьте, что скопировали полностью.");
 }
