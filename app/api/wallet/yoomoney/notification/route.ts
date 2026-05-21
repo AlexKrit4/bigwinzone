@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { completeDepositPayment } from "@/lib/complete-deposit";
 import { prisma } from "@/lib/prisma";
+import { findDepositForNotification } from "@/lib/resolve-deposit";
 import {
   describeYooMoneyVerification,
   getYooMoneyConfig,
   verifyYooMoneyNotification,
 } from "@/lib/yoomoney";
 
-const WEBHOOK_BUILD = "20260520-credit-full-deposit";
+const WEBHOOK_BUILD = "20260520-match-by-amount";
 
 function formToRecord(form: FormData): Record<string, string> {
   const out: Record<string, string> = {};
@@ -32,7 +33,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const form = await req.formData().catch(() => null);
   if (!form) {
-    console.log("[yoomoney] POST rejected: no form body");
+    console.error("[yoomoney] POST rejected: no form body");
     return new NextResponse("Bad request", { status: 400 });
   }
 
@@ -47,14 +48,15 @@ export async function POST(req: Request) {
     `label=${label || "(empty)"}`,
     `op=${operationId || "(empty)"}`,
     `amount=${allParams.amount}`,
+    `withdraw=${allParams.withdraw_amount ?? ""}`,
+    `keys=${Object.keys(allParams).sort().join(",")}`,
     allParams.sign ? "sign=yes" : "sign=no",
-    allParams.sha1_hash ? "sha1=yes" : "sha1=no",
     allParams.test_notification === "true" ? "test=yes" : "",
   );
 
   if (allParams.test_notification === "true") {
     if (!verifyYooMoneyNotification(allParams)) {
-      console.log("[yoomoney] test notification: invalid signature");
+      console.error("[yoomoney] test notification: invalid signature");
       return new NextResponse("Invalid hash", { status: 403 });
     }
     console.log("[yoomoney] test notification: OK");
@@ -80,20 +82,23 @@ export async function POST(req: Request) {
   const withdrawAmount = withdrawRaw ? Number.parseFloat(withdrawRaw) : undefined;
 
   if (!Number.isFinite(walletAmount) || walletAmount <= 0) {
-    console.log("[yoomoney] invalid amount", allParams.amount);
+    console.error("[yoomoney] invalid amount", allParams.amount);
     return new NextResponse("Invalid amount", { status: 400 });
   }
 
-  if (!label || !operationId) {
-    console.log("[yoomoney] missing label or operation_id — платёж без метки dep_...");
-    return new NextResponse("Missing fields", { status: 400 });
+  if (!operationId) {
+    console.error("[yoomoney] missing operation_id");
+    return new NextResponse("Missing operation_id", { status: 400 });
   }
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const deposit = await tx.deposit.findUnique({
-        where: { label },
-      });
+      const deposit = await findDepositForNotification(
+        tx,
+        label,
+        walletAmount,
+        Number.isFinite(withdrawAmount) ? withdrawAmount : undefined,
+      );
 
       if (!deposit) {
         throw new Error("DEPOSIT_NOT_FOUND");
@@ -107,21 +112,21 @@ export async function POST(req: Request) {
       });
     });
 
-    console.log("[yoomoney] result", label, result);
+    console.log("[yoomoney] result", label || "(matched)", operationId, result);
 
     if (result === "duplicate") {
       return new NextResponse("OK");
     }
   } catch (err) {
     if (err instanceof Error && err.message === "DEPOSIT_NOT_FOUND") {
-      console.log("[yoomoney] unknown label", label);
+      console.error("[yoomoney] deposit not found", label, operationId);
       return new NextResponse("Unknown label", { status: 404 });
     }
     if (
       err instanceof Error &&
       (err.message === "UNDERPAID" || err.message === "WITHDRAW_AMOUNT_MISMATCH")
     ) {
-      console.log("[yoomoney] payment rejected", label, err.message);
+      console.error("[yoomoney] payment rejected", label, err.message);
       return new NextResponse("Amount mismatch", { status: 400 });
     }
     console.error("[yoomoney] notification error", err);

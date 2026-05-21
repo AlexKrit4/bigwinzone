@@ -10,7 +10,9 @@
     "lint": "next lint",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "set-admin": "node scripts/set-admin.mjs"
+    "set-admin": "node scripts/set-admin.mjs",
+    "check-yoomoney": "node scripts/check-yoomoney-env.mjs",
+    "deploy:prod": "prisma generate && rm -rf .next && next build"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
