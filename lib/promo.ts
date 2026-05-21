@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { PromoWagerStatus } from "@prisma/client";
+import { isAdminGrantCode } from "@/lib/promo-codes";
 import { creditUserBalance, debitUserBalance } from "@/lib/wallet";
 
 type Tx = Prisma.TransactionClient;
@@ -28,7 +29,10 @@ export async function getPendingPromoActivation(tx: Tx, userId: string) {
 }
 
 export async function activatePromoForDeposit(tx: Tx, userId: string, code: string) {
-  const promo = await tx.promoCode.findUnique({ where: { code: code.toUpperCase() } });
+  const normalized = code.toUpperCase();
+  if (isAdminGrantCode(normalized)) throw new Error("INVALID_PROMO");
+
+  const promo = await tx.promoCode.findUnique({ where: { code: normalized } });
   if (!promo || !promo.active) throw new Error("INVALID_PROMO");
   if (promo.expiresAt && promo.expiresAt < new Date()) throw new Error("EXPIRED_PROMO");
   if (promo.maxUses != null && promo.usedCount >= promo.maxUses) {
@@ -191,7 +195,9 @@ export async function cancelPromoActivation(
       bonus,
       "PROMO_CANCEL",
       activation.id,
-      `Отмена промо ${activation.promoCode.code}`,
+      isAdminGrantCode(activation.promoCode.code)
+        ? `Отмена бонуса ${activation.promoCode.code}`
+        : `Отмена промо ${activation.promoCode.code}`,
     );
 
     const promo = await tx.promoCode.findUnique({

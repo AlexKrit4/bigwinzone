@@ -2,6 +2,7 @@ import { PromoWagerStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getUserIdFromCookie } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isAdminGrantCode } from "@/lib/admin-grant";
 import { activatePromoForDeposit, cancelPromoActivation } from "@/lib/promo";
 
 export async function GET() {
@@ -33,6 +34,7 @@ export async function GET() {
     wagering: wagering.map((w) => ({
       id: w.id,
       code: w.promoCode.code,
+      isAdminGrant: isAdminGrantCode(w.promoCode.code),
       wagerRequired: w.wagerRequired,
       wagerProgress: w.wagerProgress,
       depositAmount: w.depositAmount,

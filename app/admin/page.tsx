@@ -63,6 +63,9 @@ export default function AdminPage() {
 
   const [grantUser, setGrantUser] = useState("");
   const [grantAmount, setGrantAmount] = useState("100");
+  const [grantWager, setGrantWager] = useState("3");
+  const [revokeUser, setRevokeUser] = useState("");
+  const [revokeAmount, setRevokeAmount] = useState("100");
   const [promoCode, setPromoCode] = useState("");
   const [promoPercent, setPromoPercent] = useState("100");
   const [promoWager, setPromoWager] = useState("3");
@@ -128,12 +131,64 @@ export default function AdminPage() {
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        action: "grant",
         username: grantUser,
         amount: Number(grantAmount),
+        wagerMultiplier: Number(grantWager),
       }),
     });
     const data = await res.json();
-    setMsg(res.ok ? `Выдано ${grantUser}: ${data.balance.toFixed(2)}` : data.error);
+    setMsg(
+      res.ok
+        ? `Выдано ${grantUser}: ${data.balance.toFixed(2)} ₽, код ${data.code}, отыгрыш ${data.wagerRequired} ₽`
+        : data.error,
+    );
+    if (res.ok) load();
+  }
+
+  async function revokeBalance(event: React.FormEvent) {
+    event.preventDefault();
+    if (
+      !confirm(
+        `Списать ${revokeAmount} ₽ у ${revokeUser}? Активный ADM-бонус будет отменён, выданные бонусные рубли — списаны.`,
+      )
+    ) {
+      return;
+    }
+    setMsg("");
+    const res = await fetch("/api/admin/users", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "revoke",
+        username: revokeUser,
+        amount: Number(revokeAmount),
+      }),
+    });
+    const data = await res.json();
+    setMsg(
+      res.ok
+        ? `Списано ${data.revoked.toFixed(2)} ₽, баланс ${revokeUser}: ${data.balance.toFixed(2)}`
+        : data.error,
+    );
+    if (res.ok) load();
+  }
+
+  async function quickRevoke(username: string, balance: number) {
+    const raw = prompt(`Сколько списать у ${username}? (баланс ${balance.toFixed(2)})`, String(Math.min(100, balance)));
+    if (!raw) return;
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    setMsg("");
+    const res = await fetch("/api/admin/users", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "revoke", username, amount }),
+    });
+    const data = await res.json();
+    setMsg(res.ok ? `Списано ${data.revoked.toFixed(2)} ₽` : data.error);
     if (res.ok) load();
   }
 
@@ -225,7 +280,7 @@ export default function AdminPage() {
       )}
 
       <section className="admin-section">
-        <h2>Выдать баланс</h2>
+        <h2>Выдать баланс (с отыгрышем)</h2>
         <form className="admin-form" onSubmit={grantBalance}>
           <input
             placeholder="Ник"
@@ -236,14 +291,54 @@ export default function AdminPage() {
           <input
             type="number"
             min={1}
+            placeholder="Сумма ₽"
             value={grantAmount}
             onChange={(e) => setGrantAmount(e.target.value)}
+            required
+          />
+          <input
+            type="number"
+            min={0}
+            step={0.5}
+            placeholder="Вейджер ×"
+            value={grantWager}
+            onChange={(e) => setGrantWager(e.target.value)}
             required
           />
           <button type="submit" className="primary-btn small">
             Выдать
           </button>
         </form>
+        <p className="wallet-hint">
+          Игрок увидит код ADM-… в профиле. Отыгрыш = сумма × вейджер. 0 = без отыгрыша.
+          Отмена промо списывает всю выданную сумму.
+        </p>
+      </section>
+
+      <section className="admin-section">
+        <h2>Списать с баланса</h2>
+        <form className="admin-form" onSubmit={revokeBalance}>
+          <input
+            placeholder="Ник"
+            value={revokeUser}
+            onChange={(e) => setRevokeUser(e.target.value)}
+            required
+          />
+          <input
+            type="number"
+            min={1}
+            placeholder="Сумма ₽"
+            value={revokeAmount}
+            onChange={(e) => setRevokeAmount(e.target.value)}
+            required
+          />
+          <button type="submit" className="ghost-btn">
+            Списать
+          </button>
+        </form>
+        <p className="wallet-hint">
+          Сначала отменяется активный ADM-бонус (вся выданная сумма), затем списывается указанная сумма с баланса.
+        </p>
       </section>
 
       <section className="admin-section">
@@ -304,6 +399,7 @@ export default function AdminPage() {
                 <th>Email</th>
                 <th>Роль</th>
                 <th>Баланс</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -313,6 +409,15 @@ export default function AdminPage() {
                   <td>{u.email}</td>
                   <td>{u.role}</td>
                   <td>{u.balance.toFixed(2)}</td>
+                  <td className="admin-actions">
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() => void quickRevoke(u.username, u.balance)}
+                    >
+                      Забрать
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

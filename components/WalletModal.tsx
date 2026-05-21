@@ -16,6 +16,7 @@ type PendingPromo = {
 type WageringPromo = {
   id: string;
   code: string;
+  isAdminGrant?: boolean;
   bonusAmount: number;
   wagerProgress: number;
   wagerRequired: number;
@@ -132,9 +133,12 @@ export function WalletModal({
   }
 
   async function cancelPromo(activationId: string, bonusAmount = 0) {
+    const row = wageringPromos.find((w) => w.id === activationId);
     const msg =
       bonusAmount > 0
-        ? `Отменить промокод? С баланса спишется ${bonusAmount.toFixed(2)} ₽ бонуса.`
+        ? row?.isAdminGrant
+          ? `Отменить бонус? С баланса спишется ${bonusAmount.toFixed(2)} ₽.`
+          : `Отменить промокод? С баланса спишется ${bonusAmount.toFixed(2)} ₽ бонуса.`
         : "Отменить промокод?";
     if (!confirm(msg)) return;
 
@@ -268,8 +272,9 @@ export function WalletModal({
             {wageringPromos.map((w) => (
               <div key={w.id} className="promo-wagering-row">
                 <span>
-                  <strong>{w.code}</strong> — бонус {w.bonusAmount.toFixed(2)} ₽, отыгрыш{" "}
-                  {w.wagerProgress.toFixed(0)}/{w.wagerRequired.toFixed(0)} ₽
+                  <strong>{w.code}</strong>
+                  {w.isAdminGrant ? " (бонус админа)" : ""} — {w.bonusAmount.toFixed(2)} ₽,
+                  отыгрыш {w.wagerProgress.toFixed(0)}/{w.wagerRequired.toFixed(0)} ₽
                 </span>
                 <button
                   type="button"

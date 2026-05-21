@@ -1,5 +1,6 @@
 import { PromoWagerStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { isAdminGrantCode } from "@/lib/admin-grant";
 import { getUserIdFromCookie } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -73,6 +74,7 @@ export async function GET() {
     promos: activations.map((a) => ({
       id: a.id,
       code: a.promoCode.code,
+      isAdminGrant: isAdminGrantCode(a.promoCode.code),
       status: a.status,
       depositBonusPercent: a.promoCode.depositBonusPercent,
       wagerMultiplier: a.promoCode.wagerMultiplier,

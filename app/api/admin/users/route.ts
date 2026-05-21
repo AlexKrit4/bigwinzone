@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
+import { createAdminGrant, adminRevokeBalance } from "@/lib/admin-grant";
 import { requireAdmin } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
-import { creditUserBalance } from "@/lib/wallet";
 
 export async function GET() {
   const gate = await requireAdmin();
@@ -37,9 +37,10 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => null);
+  const action = String(body?.action ?? "grant").trim().toLowerCase();
   const username = String(body?.username ?? "").trim();
   const amount = Number(body?.amount ?? 0);
-  const note = String(body?.note ?? "Выдача админом").trim().slice(0, 200);
+  const note = String(body?.note ?? "").trim().slice(0, 200);
 
   if (!username) {
     return NextResponse.json({ error: "Укажите ник" }, { status: 400 });
@@ -53,13 +54,58 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
   }
 
-  const balance = await prisma.$transaction((tx) =>
-    creditUserBalance(tx, target.id, amount, "ADMIN_GRANT", undefined, note),
-  );
+  try {
+    if (action === "revoke") {
+      const result = await prisma.$transaction((tx) =>
+        adminRevokeBalance(
+          tx,
+          target.id,
+          amount,
+          note || "Списание админом",
+        ),
+      );
+      return NextResponse.json({
+        ok: true,
+        action: "revoke",
+        username: target.username,
+        revoked: result.revoked,
+        balance: result.balance,
+      });
+    }
 
-  return NextResponse.json({
-    ok: true,
-    username: target.username,
-    balance,
-  });
+    const wagerMultiplier = Number(body?.wagerMultiplier ?? 0);
+    if (!Number.isFinite(wagerMultiplier) || wagerMultiplier < 0) {
+      return NextResponse.json({ error: "Вейджер × должен быть ≥ 0" }, { status: 400 });
+    }
+
+    const result = await prisma.$transaction((tx) =>
+      createAdminGrant(
+        tx,
+        target.id,
+        amount,
+        wagerMultiplier,
+        note || `Бонус админа ×${wagerMultiplier}`,
+      ),
+    );
+
+    return NextResponse.json({
+      ok: true,
+      action: "grant",
+      username: target.username,
+      balance: result.balance,
+      code: result.code,
+      wagerRequired: result.activation.wagerRequired,
+    });
+  } catch (err) {
+    const map: Record<string, string> = {
+      INVALID_AMOUNT: "Некорректная сумма",
+      INVALID_WAGER: "Некорректный вейджер",
+      ADMIN_GRANT_ACTIVE: "У игрока уже есть активный ADM-бонус — сначала отмените или спишите",
+      NOTHING_TO_REVOKE: "Нечего списать (баланс 0)",
+      INSUFFICIENT_FUNDS: "Недостаточно средств для списания бонуса",
+    };
+    const msg =
+      err instanceof Error ? map[err.message] || "Ошибка операции" : "Ошибка операции";
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
 }

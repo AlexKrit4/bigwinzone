@@ -24,6 +24,7 @@ type WithdrawalRow = {
 type PromoRow = {
   id: string;
   code: string;
+  isAdminGrant?: boolean;
   status: string;
   depositBonusPercent: number;
   wagerMultiplier: number;
@@ -69,7 +70,9 @@ export function ProfileModal({ user, onClose, onBalance }: ProfileModalProps) {
   async function cancelPromo(p: PromoRow) {
     const msg =
       p.bonusAmount > 0 && p.status === "WAGERING"
-        ? `Отменить ${p.code}? С баланса спишется ${p.bonusAmount.toFixed(2)} ₽ бонуса.`
+        ? p.isAdminGrant
+          ? `Отменить бонус ${p.code}? С баланса спишется ${p.bonusAmount.toFixed(2)} ₽.`
+          : `Отменить ${p.code}? С баланса спишется ${p.bonusAmount.toFixed(2)} ₽ бонуса.`
         : `Отменить промокод ${p.code}?`;
     if (!confirm(msg)) return;
 
@@ -142,11 +145,14 @@ export function ProfileModal({ user, onClose, onBalance }: ProfileModalProps) {
                     <div key={p.id} className="promo-progress-card">
                       <div className="promo-progress-head">
                         <strong>{p.code}</strong>
-                        <span className="promo-status">{statusLabel(p.status)}</span>
+                        <span className="promo-status">
+                          {statusLabel(p.status, p.isAdminGrant)}
+                        </span>
                       </div>
                       <p className="wallet-hint">
-                        +{p.depositBonusPercent}% к депозиту · вейджер ×
-                        {p.wagerMultiplier}
+                        {p.isAdminGrant
+                          ? `Бонус от администрации · вейджер ×${p.wagerMultiplier}`
+                          : `+${p.depositBonusPercent}% к депозиту · вейджер ×${p.wagerMultiplier}`}
                       </p>
                       {p.status === "WAGERING" && (
                         <>
@@ -242,9 +248,9 @@ export function ProfileModal({ user, onClose, onBalance }: ProfileModalProps) {
   );
 }
 
-function statusLabel(status: string) {
+function statusLabel(status: string, isAdminGrant?: boolean) {
   if (status === "WAITING_DEPOSIT") return "Ждёт депозит";
-  if (status === "WAGERING") return "Отыгрыш";
+  if (status === "WAGERING") return isAdminGrant ? "Бонус · отыгрыш" : "Отыгрыш";
   if (status === "COMPLETED") return "Готово";
   return status;
 }
