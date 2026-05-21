@@ -25,6 +25,7 @@ type DepositRow = {
   amount: number;
   bonusAmount: number;
   status: string;
+  label: string;
   externalId: string | null;
   createdAt: string;
   completedAt: string | null;
@@ -66,6 +67,26 @@ export default function AdminPage() {
   const [promoPercent, setPromoPercent] = useState("100");
   const [promoWager, setPromoWager] = useState("3");
   const [promoMax, setPromoMax] = useState("");
+
+  async function confirmDeposit(depositId: string) {
+    if (!confirm("Зачислить депозит на баланс? Убедитесь, что деньги уже пришли в кошелёк ЮMoney.")) {
+      return;
+    }
+    setMsg("");
+    const res = await fetch("/api/admin/deposits", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ depositId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setMsg(data.error || "Ошибка подтверждения");
+      return;
+    }
+    setMsg("Депозит зачислен");
+    load();
+  }
 
   const load = useCallback(async () => {
     const me = await fetch("/api/auth/me", { credentials: "include" });
@@ -310,7 +331,9 @@ export default function AdminPage() {
                 <th>Сумма</th>
                 <th>Бонус</th>
                 <th>Статус</th>
+                <th>Метка</th>
                 <th>ID ЮMoney</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -321,7 +344,19 @@ export default function AdminPage() {
                   <td>{d.amount.toFixed(2)}</td>
                   <td>{d.bonusAmount > 0 ? d.bonusAmount.toFixed(2) : "—"}</td>
                   <td>{d.status}</td>
+                  <td style={{ fontSize: "0.8rem" }}>{d.label}</td>
                   <td>{d.externalId || "—"}</td>
+                  <td className="admin-actions">
+                    {d.status === "PENDING" && (
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        onClick={() => confirmDeposit(d.id)}
+                      >
+                        Зачислить
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

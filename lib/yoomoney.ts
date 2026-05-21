@@ -15,8 +15,39 @@ export function isYooMoneyConfigured() {
   return Boolean(wallet && secret);
 }
 
-/** Проверка sha1_hash из HTTP-уведомления ЮMoney */
-export function verifyYooMoneyNotification(params: {
+function timingSafeEqualHex(a: string, b: string) {
+  const aa = a.toLowerCase();
+  const bb = b.toLowerCase();
+  if (aa.length !== bb.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(aa, "utf8"), Buffer.from(bb, "utf8"));
+  } catch {
+    return false;
+  }
+}
+
+/** HMAC-SHA256 подпись (параметр sign, актуально с 2026). */
+export function verifyYooMoneySign(allParams: Record<string, string>) {
+  const { secret } = getYooMoneyConfig();
+  const sign = allParams.sign?.trim();
+  if (!secret || !sign) return false;
+
+  const stringToSign = Object.entries(allParams)
+    .filter(([key]) => key !== "sign")
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+    .join("&");
+
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(stringToSign)
+    .digest("hex");
+
+  return timingSafeEqualHex(expected, sign);
+}
+
+/** SHA-1 hash (sha1_hash, устарел с 18.05.2026). */
+export function verifyYooMoneySha1(params: {
   notification_type: string;
   operation_id: string;
   amount: string;
@@ -28,7 +59,7 @@ export function verifyYooMoneyNotification(params: {
   sha1_hash: string;
 }) {
   const { secret } = getYooMoneyConfig();
-  if (!secret) return false;
+  if (!secret || !params.sha1_hash?.trim()) return false;
 
   const base = [
     params.notification_type,
@@ -37,13 +68,31 @@ export function verifyYooMoneyNotification(params: {
     params.currency,
     params.datetime,
     params.sender,
-    params.codepro,
+    params.codepro || "false",
     secret,
     params.label,
   ].join("&");
 
   const hash = crypto.createHash("sha1").update(base).digest("hex");
-  return hash === params.sha1_hash;
+  return timingSafeEqualHex(hash, params.sha1_hash);
+}
+
+/** Проверка HTTP-уведомления: sign (приоритет) или sha1_hash. */
+export function verifyYooMoneyNotification(allParams: Record<string, string>) {
+  if (allParams.sign?.trim()) {
+    return verifyYooMoneySign(allParams);
+  }
+  return verifyYooMoneySha1({
+    notification_type: allParams.notification_type ?? "",
+    operation_id: allParams.operation_id ?? "",
+    amount: allParams.amount ?? "",
+    currency: allParams.currency ?? "",
+    datetime: allParams.datetime ?? "",
+    sender: allParams.sender ?? "",
+    codepro: allParams.codepro ?? "false",
+    label: allParams.label ?? "",
+    sha1_hash: allParams.sha1_hash ?? "",
+  });
 }
 
 /** Ссылка на оплату через форму QuickPay */
