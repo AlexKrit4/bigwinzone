@@ -24,7 +24,8 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => null);
   const code = String(body?.code ?? "").trim().toUpperCase();
-  const bonusAmount = Number(body?.bonusAmount ?? 0);
+  const depositBonusPercent = Number(body?.depositBonusPercent ?? 0);
+  const wagerMultiplier = Number(body?.wagerMultiplier ?? 1);
   const maxUses =
     body?.maxUses == null || body?.maxUses === ""
       ? null
@@ -33,15 +34,25 @@ export async function POST(req: Request) {
   if (!code || code.length < 3) {
     return NextResponse.json({ error: "Код минимум 3 символа" }, { status: 400 });
   }
-  if (!Number.isFinite(bonusAmount) || bonusAmount <= 0) {
-    return NextResponse.json({ error: "Бонус должен быть > 0" }, { status: 400 });
+  if (!Number.isFinite(depositBonusPercent) || depositBonusPercent <= 0) {
+    return NextResponse.json(
+      { error: "Процент к депозиту должен быть > 0" },
+      { status: 400 },
+    );
+  }
+  if (!Number.isFinite(wagerMultiplier) || wagerMultiplier < 1) {
+    return NextResponse.json(
+      { error: "Вейджер (множитель) должен быть ≥ 1" },
+      { status: 400 },
+    );
   }
 
   try {
     const promo = await prisma.promoCode.create({
       data: {
         code,
-        bonusAmount,
+        depositBonusPercent,
+        wagerMultiplier,
         maxUses: Number.isFinite(maxUses) ? maxUses : null,
         expiresAt: body?.expiresAt ? new Date(body.expiresAt) : null,
       },

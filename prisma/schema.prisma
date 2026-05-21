@@ -25,6 +25,13 @@ enum WithdrawalStatus {
   PAID
 }
 
+enum PromoWagerStatus {
+  WAITING_DEPOSIT
+  WAGERING
+  COMPLETED
+  CANCELLED
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -35,10 +42,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  deposits            Deposit[]
-  withdrawals         WithdrawalRequest[]
-  ledger              BalanceLedger[]
-  promoRedemptions    PromoRedemption[]
+  deposits             Deposit[]
+  withdrawals          WithdrawalRequest[]
+  ledger               BalanceLedger[]
+  promoActivations     PromoActivation[]
   processedWithdrawals WithdrawalRequest[] @relation("WithdrawalProcessor")
 }
 
@@ -46,15 +53,19 @@ model Deposit {
   id          String        @id @default(cuid())
   userId      String
   amount      Float
+  bonusAmount Float         @default(0)
   currency    String        @default("RUB")
   status      DepositStatus @default(PENDING)
   provider    String        @default("yoomoney")
   label       String        @unique
   externalId  String?       @unique
+  promoCodeId String?
   createdAt   DateTime      @default(now())
   completedAt DateTime?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promoCode       PromoCode?       @relation(fields: [promoCodeId], references: [id])
+  promoActivation PromoActivation?
 
   @@index([userId, createdAt])
   @@index([status])
@@ -72,7 +83,7 @@ model WithdrawalRequest {
   createdAt     DateTime         @default(now())
   processedAt   DateTime?
 
-  user      User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   processedBy User? @relation("WithdrawalProcessor", fields: [processedById], references: [id])
 
   @@index([userId, createdAt])
@@ -80,28 +91,40 @@ model WithdrawalRequest {
 }
 
 model PromoCode {
-  id          String    @id @default(cuid())
-  code        String    @unique
-  bonusAmount Float
-  maxUses     Int?
-  usedCount   Int       @default(0)
-  active      Boolean   @default(true)
-  expiresAt   DateTime?
-  createdAt   DateTime  @default(now())
+  id                  String    @id @default(cuid())
+  code                String    @unique
+  depositBonusPercent Float
+  wagerMultiplier     Float
+  maxUses             Int?
+  usedCount           Int       @default(0)
+  active              Boolean   @default(true)
+  expiresAt           DateTime?
+  createdAt           DateTime  @default(now())
 
-  redemptions PromoRedemption[]
+  activations PromoActivation[]
+  deposits    Deposit[]
 }
 
-model PromoRedemption {
-  id          String   @id @default(cuid())
-  promoCodeId String
-  userId      String
-  createdAt   DateTime @default(now())
+model PromoActivation {
+  id            String           @id @default(cuid())
+  userId        String
+  promoCodeId   String
+  status        PromoWagerStatus @default(WAITING_DEPOSIT)
+  depositId     String?          @unique
+  depositAmount Float            @default(0)
+  bonusAmount   Float            @default(0)
+  wagerRequired Float            @default(0)
+  wagerProgress Float            @default(0)
+  createdAt     DateTime         @default(now())
+  appliedAt     DateTime?
+  completedAt   DateTime?
 
-  promoCode PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promoCode PromoCode  @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  deposit   Deposit?   @relation(fields: [depositId], references: [id])
 
   @@unique([promoCodeId, userId])
+  @@index([userId, status])
 }
 
 model BalanceLedger {

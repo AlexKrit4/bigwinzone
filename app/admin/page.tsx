@@ -23,6 +23,7 @@ type DepositRow = {
   id: string;
   username: string;
   amount: number;
+  bonusAmount: number;
   status: string;
   externalId: string | null;
   createdAt: string;
@@ -43,7 +44,8 @@ type WithdrawalRow = {
 type PromoRow = {
   id: string;
   code: string;
-  bonusAmount: number;
+  depositBonusPercent: number;
+  wagerMultiplier: number;
   usedCount: number;
   maxUses: number | null;
   active: boolean;
@@ -61,7 +63,8 @@ export default function AdminPage() {
   const [grantUser, setGrantUser] = useState("");
   const [grantAmount, setGrantAmount] = useState("100");
   const [promoCode, setPromoCode] = useState("");
-  const [promoBonus, setPromoBonus] = useState("50");
+  const [promoPercent, setPromoPercent] = useState("100");
+  const [promoWager, setPromoWager] = useState("3");
   const [promoMax, setPromoMax] = useState("");
 
   const load = useCallback(async () => {
@@ -122,7 +125,8 @@ export default function AdminPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         code: promoCode,
-        bonusAmount: Number(promoBonus),
+        depositBonusPercent: Number(promoPercent),
+        wagerMultiplier: Number(promoWager),
         maxUses: promoMax ? Number(promoMax) : null,
       }),
     });
@@ -222,7 +226,7 @@ export default function AdminPage() {
       </section>
 
       <section className="admin-section">
-        <h2>Создать промокод</h2>
+        <h2>Создать промокод к депозиту</h2>
         <form className="admin-form" onSubmit={createPromo}>
           <input
             placeholder="КОД"
@@ -233,9 +237,18 @@ export default function AdminPage() {
           <input
             type="number"
             min={1}
-            placeholder="Бонус"
-            value={promoBonus}
-            onChange={(e) => setPromoBonus(e.target.value)}
+            placeholder="% к депозиту"
+            value={promoPercent}
+            onChange={(e) => setPromoPercent(e.target.value)}
+            required
+          />
+          <input
+            type="number"
+            min={1}
+            step={0.5}
+            placeholder="Вейджер ×"
+            value={promoWager}
+            onChange={(e) => setPromoWager(e.target.value)}
             required
           />
           <input
@@ -252,7 +265,8 @@ export default function AdminPage() {
         <ul className="admin-list compact">
           {promos.map((p) => (
             <li key={p.id}>
-              {p.code} — {p.bonusAmount} ₽ ({p.usedCount}
+              {p.code} — +{p.depositBonusPercent}% к депозиту, вейджер ×
+              {p.wagerMultiplier} ({p.usedCount}
               {p.maxUses != null ? ` / ${p.maxUses}` : ""})
             </li>
           ))}
@@ -294,6 +308,7 @@ export default function AdminPage() {
                 <th>Дата</th>
                 <th>Ник</th>
                 <th>Сумма</th>
+                <th>Бонус</th>
                 <th>Статус</th>
                 <th>ID ЮMoney</th>
               </tr>
@@ -304,6 +319,7 @@ export default function AdminPage() {
                   <td>{new Date(d.createdAt).toLocaleString("ru-RU")}</td>
                   <td>{d.username}</td>
                   <td>{d.amount.toFixed(2)}</td>
+                  <td>{d.bonusAmount > 0 ? d.bonusAmount.toFixed(2) : "—"}</td>
                   <td>{d.status}</td>
                   <td>{d.externalId || "—"}</td>
                 </tr>

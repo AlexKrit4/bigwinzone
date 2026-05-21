@@ -22,6 +22,7 @@ export async function GET() {
       username: d.user.username,
       email: d.user.email,
       amount: Number(d.amount),
+      bonusAmount: Number(d.bonusAmount),
       status: d.status,
       provider: d.provider,
       label: d.label,

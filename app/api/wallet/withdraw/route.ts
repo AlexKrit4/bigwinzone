@@ -2,6 +2,7 @@ import { WithdrawalStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getUserIdFromCookie } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { assertCanWithdraw } from "@/lib/promo";
 import { debitUserBalance } from "@/lib/wallet";
 
 export async function GET() {
@@ -66,6 +67,7 @@ export async function POST(req: Request) {
 
   try {
     const withdrawal = await prisma.$transaction(async (tx) => {
+      await assertCanWithdraw(tx, userId);
       await debitUserBalance(tx, userId, amount, "WITHDRAW_HOLD", undefined, "Заявка на вывод");
 
       return tx.withdrawalRequest.create({
@@ -91,6 +93,15 @@ export async function POST(req: Request) {
   } catch (err) {
     if (err instanceof Error && err.message === "INSUFFICIENT_FUNDS") {
       return NextResponse.json({ error: "Недостаточно средств" }, { status: 400 });
+    }
+    if (err instanceof Error && err.message.startsWith("WAGER_INCOMPLETE:")) {
+      const left = err.message.split(":")[1];
+      return NextResponse.json(
+        {
+          error: `Сначала отыграйте бонус. Осталось поставить: ${left} ₽`,
+        },
+        { status: 400 },
+      );
     }
     console.error("[withdraw]", err);
     return NextResponse.json({ error: "Не удалось создать заявку" }, { status: 500 });

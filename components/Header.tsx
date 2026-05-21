@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AuthModal, AuthUser } from "@/components/AuthModal";
+import { ProfileModal } from "@/components/ProfileModal";
 import { WalletModal } from "@/components/WalletModal";
 
 export function Header() {
@@ -12,6 +13,7 @@ export function Header() {
   const [walletTab, setWalletTab] = useState<"deposit" | "withdraw" | "promo">(
     "deposit",
   );
+  const [profileOpen, setProfileOpen] = useState(false);
 
   async function refreshMe() {
     const res = await fetch("/api/auth/me", { credentials: "include" });
@@ -65,6 +67,13 @@ export function Header() {
               </div>
               <button
                 type="button"
+                className="ghost-btn"
+                onClick={() => setProfileOpen(true)}
+              >
+                Профиль
+              </button>
+              <button
+                type="button"
                 className="secondary-btn"
                 onClick={() => {
                   setWalletTab("deposit");
@@ -110,6 +119,9 @@ export function Header() {
           onClose={() => setAuthMode(null)}
           onAuthed={setUser}
         />
+      )}
+      {profileOpen && user && (
+        <ProfileModal user={user} onClose={() => setProfileOpen(false)} />
       )}
       {walletOpen && user && (
         <WalletModal

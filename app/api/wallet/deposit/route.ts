@@ -1,6 +1,7 @@
 import { DepositStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getUserIdFromCookie } from "@/lib/auth";
+import { getPendingPromoActivation } from "@/lib/promo";
 import { prisma } from "@/lib/prisma";
 import { buildYooMoneyPaymentUrl, isYooMoneyConfigured } from "@/lib/yoomoney";
 
@@ -27,22 +28,37 @@ export async function POST(req: Request) {
     );
   }
 
-  const deposit = await prisma.deposit.create({
-    data: {
-      userId,
-      amount,
-      status: DepositStatus.PENDING,
-      label: `dep_${cryptoRandom()}`,
-    },
+  const deposit = await prisma.$transaction(async (tx) => {
+    const pending = await getPendingPromoActivation(tx, userId);
+    return tx.deposit.create({
+      data: {
+        userId,
+        amount,
+        status: DepositStatus.PENDING,
+        label: `dep_${cryptoRandom()}`,
+        promoCodeId: pending?.promoCodeId ?? null,
+      },
+    });
   });
 
   const paymentUrl = buildYooMoneyPaymentUrl(amount, deposit.label);
+
+  const pending = deposit.promoCodeId
+    ? await prisma.promoCode.findUnique({ where: { id: deposit.promoCodeId } })
+    : null;
 
   return NextResponse.json({
     depositId: deposit.id,
     label: deposit.label,
     amount,
     paymentUrl,
+    promo: pending
+      ? {
+          code: pending.code,
+          depositBonusPercent: pending.depositBonusPercent,
+          wagerMultiplier: pending.wagerMultiplier,
+        }
+      : null,
   });
 }
 

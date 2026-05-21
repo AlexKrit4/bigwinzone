@@ -1,6 +1,7 @@
 import { DepositStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { applyPromoOnDeposit } from "@/lib/promo";
 import { creditUserBalance } from "@/lib/wallet";
 import { verifyYooMoneyNotification } from "@/lib/yoomoney";
 
@@ -79,6 +80,8 @@ export async function POST(req: Request) {
           amount: paidAmount,
         },
       });
+
+      await applyPromoOnDeposit(tx, deposit.id, deposit.userId, paidAmount);
     });
   } catch (err) {
     if (err instanceof Error && err.message === "DEPOSIT_NOT_FOUND") {

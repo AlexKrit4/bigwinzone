@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getUserIdFromCookie } from "@/lib/auth";
+import { addWagerProgress } from "@/lib/promo";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
         throw new Error("INSUFFICIENT_FUNDS");
       }
 
-      return tx.user.update({
+      const updated = await tx.user.update({
         where: { id: userId },
         data: {
           balance: {
@@ -49,6 +50,12 @@ export async function POST(req: Request) {
         },
         select: { balance: true },
       });
+
+      if (bet > 0) {
+        await addWagerProgress(tx, userId, bet);
+      }
+
+      return updated;
     });
 
     return NextResponse.json({ balance: Number(updated.balance) });

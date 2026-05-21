@@ -1,9 +1,16 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import type { AuthUser } from "@/components/AuthModal";
 
 type WalletTab = "deposit" | "withdraw" | "promo";
+
+type PendingPromo = {
+  code: string;
+  depositBonusPercent: number;
+  wagerMultiplier: number;
+  hint?: string;
+};
 
 type WalletModalProps = {
   user: AuthUser;
@@ -23,8 +30,20 @@ export function WalletModal({
   const [payoutTo, setPayoutTo] = useState("");
   const [note, setNote] = useState("");
   const [promo, setPromo] = useState("");
+  const [pendingPromo, setPendingPromo] = useState<PendingPromo | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  async function loadPendingPromo() {
+    const res = await fetch("/api/wallet/promo", { credentials: "include" });
+    if (!res.ok) return;
+    const data = await res.json();
+    setPendingPromo(data.pending ?? null);
+  }
+
+  useEffect(() => {
+    loadPendingPromo();
+  }, []);
 
   async function onDeposit(event: FormEvent) {
     event.preventDefault();
@@ -39,6 +58,7 @@ export function WalletModal({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Ошибка депозита");
+      if (data.promo) setPendingPromo(data.promo);
       window.open(data.paymentUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка");
@@ -65,7 +85,6 @@ export function WalletModal({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Ошибка вывода");
       onBalance(data.balance);
-      setError("");
       alert("Заявка на вывод создана. Ожидайте обработки.");
       onClose();
     } catch (err) {
@@ -88,14 +107,22 @@ export function WalletModal({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Ошибка промокода");
-      onBalance(data.balance);
-      alert("Промокод активирован!");
-      onClose();
+      setPendingPromo(data.pending);
+      setPromo("");
+      setTab("deposit");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function cancelPendingPromo() {
+    await fetch("/api/wallet/promo", {
+      method: "DELETE",
+      credentials: "include",
+    });
+    setPendingPromo(null);
   }
 
   return (
@@ -107,7 +134,7 @@ export function WalletModal({
         <p className="eyebrow">Кошелёк</p>
         <h2>{user.username}</h2>
         <p className="wallet-balance-line">
-          Баланс: <strong>{user.balance.toFixed(2)}</strong>
+          Баланс: <strong>{user.balance.toFixed(2)} ₽</strong>
         </p>
 
         <div className="wallet-tabs">
@@ -136,6 +163,19 @@ export function WalletModal({
 
         {tab === "deposit" && (
           <form onSubmit={onDeposit} className="auth-form">
+            {pendingPromo && (
+              <div className="promo-pending-banner">
+                <strong>{pendingPromo.code}</strong>: +{pendingPromo.depositBonusPercent}%
+                к депозиту, отыгрыш ×{pendingPromo.wagerMultiplier}
+                <button
+                  type="button"
+                  className="ghost-btn promo-cancel-btn"
+                  onClick={() => void cancelPendingPromo()}
+                >
+                  Отменить
+                </button>
+              </div>
+            )}
             <label>
               Сумма (₽), мин. 50
               <input
@@ -148,8 +188,8 @@ export function WalletModal({
               />
             </label>
             <p className="wallet-hint">
-              Оплата через ЮMoney. После перевода баланс обновится автоматически
-              (1–2 минуты).
+              Оплата через ЮMoney. Бонус по промокоду начислится после зачисления
+              депозита.
             </p>
             {error && <div className="auth-error">{error}</div>}
             <button className="primary-btn" disabled={loading}>
@@ -184,6 +224,9 @@ export function WalletModal({
               Комментарий (необязательно)
               <input value={note} onChange={(e) => setNote(e.target.value)} />
             </label>
+            <p className="wallet-hint">
+              Вывод недоступен, пока не отыгран активный бонус по промокоду.
+            </p>
             {error && <div className="auth-error">{error}</div>}
             <button className="primary-btn" disabled={loading}>
               {loading ? "..." : "Создать заявку на вывод"}
@@ -194,16 +237,20 @@ export function WalletModal({
         {tab === "promo" && (
           <form onSubmit={onPromo} className="auth-form">
             <label>
-              Промокод
+              Промокод к депозиту
               <input
                 value={promo}
                 onChange={(e) => setPromo(e.target.value.toUpperCase())}
                 required
               />
             </label>
+            <p className="wallet-hint">
+              Сначала активируйте код, затем пополните баланс. Бонус % начислится
+              автоматически. Сумму ставок нужно отыграть перед выводом.
+            </p>
             {error && <div className="auth-error">{error}</div>}
             <button className="primary-btn" disabled={loading}>
-              {loading ? "..." : "Активировать"}
+              {loading ? "..." : "Привязать к депозиту"}
             </button>
           </form>
         )}
