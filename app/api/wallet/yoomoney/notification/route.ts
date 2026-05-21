@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { completeDepositPayment } from "@/lib/complete-deposit";
 import { prisma } from "@/lib/prisma";
-import { getYooMoneyConfig, verifyYooMoneyNotification } from "@/lib/yoomoney";
+import {
+  describeYooMoneyVerification,
+  getYooMoneyConfig,
+  verifyYooMoneyNotification,
+} from "@/lib/yoomoney";
+
+const WEBHOOK_BUILD = "20260520-sign-fallback";
 
 function formToRecord(form: FormData): Record<string, string> {
   const out: Record<string, string> = {};
@@ -19,6 +25,7 @@ export async function GET() {
     message: "YooMoney webhook endpoint. Send POST with form body.",
     configured: Boolean(wallet && secret),
     walletSuffix: wallet ? wallet.slice(-4) : null,
+    build: WEBHOOK_BUILD,
   });
 }
 
@@ -35,6 +42,7 @@ export async function POST(req: Request) {
 
   console.log(
     "[yoomoney] POST",
+    WEBHOOK_BUILD,
     `type=${allParams.notification_type}`,
     `label=${label || "(empty)"}`,
     `op=${operationId || "(empty)"}`,
@@ -55,11 +63,14 @@ export async function POST(req: Request) {
 
   if (!verifyYooMoneyNotification(allParams)) {
     const { secret } = getYooMoneyConfig();
-    console.log(
+    const check = describeYooMoneyVerification(allParams);
+    console.error(
       "[yoomoney] invalid signature",
+      WEBHOOK_BUILD,
       `label=${label}`,
-      `secretSet=${Boolean(secret)}`,
       `secretLen=${secret?.length ?? 0}`,
+      `sign=${check.hasSign ? (check.signOk ? "ok" : "fail") : "none"}`,
+      `sha1=${check.hasSha1 ? (check.sha1Ok ? "ok" : "fail") : "none"}`,
     );
     return new NextResponse("Invalid hash", { status: 403 });
   }

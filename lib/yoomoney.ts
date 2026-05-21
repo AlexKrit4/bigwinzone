@@ -83,12 +83,8 @@ export function verifyYooMoneySha1(params: {
   return timingSafeEqualHex(hash, params.sha1_hash);
 }
 
-/** Проверка HTTP-уведомления: sign (приоритет) или sha1_hash. */
-export function verifyYooMoneyNotification(allParams: Record<string, string>) {
-  if (allParams.sign?.trim()) {
-    return verifyYooMoneySign(allParams);
-  }
-  return verifyYooMoneySha1({
+function sha1ParamsFromRecord(allParams: Record<string, string>) {
+  return {
     notification_type: allParams.notification_type ?? "",
     operation_id: allParams.operation_id ?? "",
     amount: allParams.amount ?? "",
@@ -98,7 +94,30 @@ export function verifyYooMoneyNotification(allParams: Record<string, string>) {
     codepro: allParams.codepro ?? "false",
     label: allParams.label ?? "",
     sha1_hash: allParams.sha1_hash ?? "",
-  });
+  };
+}
+
+/** Проверка HTTP-уведомления: sign, при неудаче — sha1_hash (если пришёл). */
+export function verifyYooMoneyNotification(allParams: Record<string, string>) {
+  const sha1Params = sha1ParamsFromRecord(allParams);
+
+  if (allParams.sign?.trim()) {
+    if (verifyYooMoneySign(allParams)) return true;
+    if (sha1Params.sha1_hash.trim() && verifyYooMoneySha1(sha1Params)) {
+      return true;
+    }
+    return false;
+  }
+
+  return verifyYooMoneySha1(sha1Params);
+}
+
+export function describeYooMoneyVerification(allParams: Record<string, string>) {
+  const hasSign = Boolean(allParams.sign?.trim());
+  const hasSha1 = Boolean(allParams.sha1_hash?.trim());
+  const signOk = hasSign ? verifyYooMoneySign(allParams) : false;
+  const sha1Ok = hasSha1 ? verifyYooMoneySha1(sha1ParamsFromRecord(allParams)) : false;
+  return { hasSign, hasSha1, signOk, sha1Ok };
 }
 
 /** Ссылка на оплату через форму QuickPay */
