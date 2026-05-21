@@ -6,10 +6,19 @@ import type { AuthUser } from "@/components/AuthModal";
 type WalletTab = "deposit" | "withdraw" | "promo";
 
 type PendingPromo = {
+  id: string;
   code: string;
   depositBonusPercent: number;
   wagerMultiplier: number;
   hint?: string;
+};
+
+type WageringPromo = {
+  id: string;
+  code: string;
+  bonusAmount: number;
+  wagerProgress: number;
+  wagerRequired: number;
 };
 
 type WalletModalProps = {
@@ -31,6 +40,7 @@ export function WalletModal({
   const [note, setNote] = useState("");
   const [promo, setPromo] = useState("");
   const [pendingPromo, setPendingPromo] = useState<PendingPromo | null>(null);
+  const [wageringPromos, setWageringPromos] = useState<WageringPromo[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -39,6 +49,7 @@ export function WalletModal({
     if (!res.ok) return;
     const data = await res.json();
     setPendingPromo(data.pending ?? null);
+    setWageringPromos(data.wagering ?? []);
   }
 
   useEffect(() => {
@@ -120,12 +131,27 @@ export function WalletModal({
     }
   }
 
-  async function cancelPendingPromo() {
-    await fetch("/api/wallet/promo", {
-      method: "DELETE",
-      credentials: "include",
-    });
+  async function cancelPromo(activationId: string, bonusAmount = 0) {
+    const msg =
+      bonusAmount > 0
+        ? `Отменить промокод? С баланса спишется ${bonusAmount.toFixed(2)} ₽ бонуса.`
+        : "Отменить промокод?";
+    if (!confirm(msg)) return;
+
+    setError("");
+    const res = await fetch(
+      `/api/wallet/promo?activationId=${encodeURIComponent(activationId)}`,
+      { method: "DELETE", credentials: "include" },
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || "Не удалось отменить");
+      return;
+    }
     setPendingPromo(null);
+    setWageringPromos((list) => list.filter((w) => w.id !== activationId));
+    if (typeof data.balance === "number") onBalance(data.balance);
+    await loadPendingPromo();
   }
 
   return (
@@ -173,7 +199,7 @@ export function WalletModal({
                 <button
                   type="button"
                   className="ghost-btn promo-cancel-btn"
-                  onClick={() => void cancelPendingPromo()}
+                  onClick={() => void cancelPromo(pendingPromo.id)}
                 >
                   Отменить
                 </button>
@@ -235,6 +261,26 @@ export function WalletModal({
               {loading ? "..." : "Создать заявку на вывод"}
             </button>
           </form>
+        )}
+
+        {wageringPromos.length > 0 && tab !== "withdraw" && (
+          <div className="promo-pending-banner">
+            {wageringPromos.map((w) => (
+              <div key={w.id} className="promo-wagering-row">
+                <span>
+                  <strong>{w.code}</strong> — бонус {w.bonusAmount.toFixed(2)} ₽, отыгрыш{" "}
+                  {w.wagerProgress.toFixed(0)}/{w.wagerRequired.toFixed(0)} ₽
+                </span>
+                <button
+                  type="button"
+                  className="ghost-btn promo-cancel-btn"
+                  onClick={() => void cancelPromo(w.id, w.bonusAmount)}
+                >
+                  Отменить
+                </button>
+              </div>
+            ))}
+          </div>
         )}
 
         {tab === "promo" && (

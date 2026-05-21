@@ -775,3 +775,16 @@ body.casino-play-active .site-footer {
   padding: 6px 12px;
   font-size: 0.82rem;
 }
+
+.promo-wagering-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.promo-wagering-row:last-child {
+  margin-bottom: 0;
+}

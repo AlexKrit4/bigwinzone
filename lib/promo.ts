@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { PromoWagerStatus } from "@prisma/client";
-import { creditUserBalance } from "@/lib/wallet";
+import { creditUserBalance, debitUserBalance } from "@/lib/wallet";
 
 type Tx = Prisma.TransactionClient;
 
@@ -160,6 +160,80 @@ export async function addWagerProgress(tx: Tx, userId: string, betAmount: number
       },
     });
   }
+}
+
+/** Отменить активный промо: WAITING_DEPOSIT или WAGERING (бонус списывается с баланса). */
+export async function cancelPromoActivation(
+  tx: Tx,
+  userId: string,
+  activationId: string,
+) {
+  const activation = await tx.promoActivation.findFirst({
+    where: { id: activationId, userId },
+    include: { promoCode: true },
+  });
+  if (!activation) throw new Error("NOT_FOUND");
+
+  if (activation.status === PromoWagerStatus.CANCELLED) {
+    return { activation, balance: await getUserBalance(tx, userId) };
+  }
+
+  if (activation.status === PromoWagerStatus.COMPLETED) {
+    throw new Error("CANNOT_CANCEL_COMPLETED");
+  }
+
+  const bonus = Number(activation.bonusAmount);
+
+  if (activation.status === PromoWagerStatus.WAGERING && bonus > 0) {
+    await debitUserBalance(
+      tx,
+      userId,
+      bonus,
+      "PROMO_CANCEL",
+      activation.id,
+      `Отмена промо ${activation.promoCode.code}`,
+    );
+
+    const promo = await tx.promoCode.findUnique({
+      where: { id: activation.promoCodeId },
+      select: { usedCount: true },
+    });
+    if (promo && promo.usedCount > 0) {
+      await tx.promoCode.update({
+        where: { id: activation.promoCodeId },
+        data: { usedCount: { decrement: 1 } },
+      });
+    }
+
+    if (activation.depositId) {
+      await tx.deposit.update({
+        where: { id: activation.depositId },
+        data: { bonusAmount: 0 },
+      });
+    }
+  }
+
+  await tx.promoActivation.update({
+    where: { id: activation.id },
+    data: {
+      status: PromoWagerStatus.CANCELLED,
+      wagerProgress: 0,
+      wagerRequired: 0,
+      completedAt: null,
+    },
+  });
+
+  const balance = await getUserBalance(tx, userId);
+  return { activation, balance };
+}
+
+async function getUserBalance(tx: Tx, userId: string) {
+  const user = await tx.user.findUnique({
+    where: { id: userId },
+    select: { balance: true },
+  });
+  if (!user) throw new Error("USER_NOT_FOUND");
+  return Number(user.balance);
 }
 
 export async function assertCanWithdraw(tx: Tx, userId: string) {

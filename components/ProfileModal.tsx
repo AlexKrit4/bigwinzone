@@ -37,14 +37,16 @@ type PromoRow = {
 type ProfileModalProps = {
   user: AuthUser;
   onClose: () => void;
+  onBalance?: (balance: number) => void;
 };
 
-export function ProfileModal({ user, onClose }: ProfileModalProps) {
+export function ProfileModal({ user, onClose, onBalance }: ProfileModalProps) {
   const [tab, setTab] = useState<"deposits" | "withdrawals" | "promos">("promos");
   const [loading, setLoading] = useState(true);
   const [deposits, setDeposits] = useState<DepositRow[]>([]);
   const [withdrawals, setWithdrawals] = useState<WithdrawalRow[]>([]);
   const [promos, setPromos] = useState<PromoRow[]>([]);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,6 +65,27 @@ export function ProfileModal({ user, onClose }: ProfileModalProps) {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function cancelPromo(p: PromoRow) {
+    const msg =
+      p.bonusAmount > 0 && p.status === "WAGERING"
+        ? `Отменить ${p.code}? С баланса спишется ${p.bonusAmount.toFixed(2)} ₽ бонуса.`
+        : `Отменить промокод ${p.code}?`;
+    if (!confirm(msg)) return;
+
+    setError("");
+    const res = await fetch(
+      `/api/wallet/promo?activationId=${encodeURIComponent(p.id)}`,
+      { method: "DELETE", credentials: "include" },
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || "Не удалось отменить");
+      return;
+    }
+    if (typeof data.balance === "number") onBalance?.(data.balance);
+    load();
+  }
 
   const activePromos = promos.filter(
     (p) => p.status === "WAITING_DEPOSIT" || p.status === "WAGERING",
@@ -103,6 +126,8 @@ export function ProfileModal({ user, onClose }: ProfileModalProps) {
             Выводы
           </button>
         </div>
+
+        {error && <div className="auth-error">{error}</div>}
 
         {loading ? (
           <p className="wallet-hint">Загрузка...</p>
@@ -146,6 +171,13 @@ export function ProfileModal({ user, onClose }: ProfileModalProps) {
                           Активирован — сделайте депозит, чтобы получить бонус.
                         </p>
                       )}
+                      <button
+                        type="button"
+                        className="ghost-btn promo-cancel-btn"
+                        onClick={() => void cancelPromo(p)}
+                      >
+                        Отменить промокод
+                      </button>
                     </div>
                   ))
                 )}

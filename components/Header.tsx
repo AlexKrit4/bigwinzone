@@ -164,7 +164,16 @@ export function Header() {
         />
       )}
       {profileOpen && user && (
-        <ProfileModal user={user} onClose={() => setProfileOpen(false)} />
+        <ProfileModal
+          user={user}
+          onClose={() => setProfileOpen(false)}
+          onBalance={(balance) => {
+            setUser((u) => (u ? { ...u, balance } : u));
+            window.dispatchEvent(
+              new CustomEvent("casino:balance", { detail: { balance } }),
+            );
+          }}
+        />
       )}
       {walletOpen && user && (
         <WalletModal
