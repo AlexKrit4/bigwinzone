@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { completeDepositPayment } from "@/lib/complete-deposit";
 import { prisma } from "@/lib/prisma";
-import { verifyYooMoneyNotification } from "@/lib/yoomoney";
+import { getYooMoneyConfig, verifyYooMoneyNotification } from "@/lib/yoomoney";
 
 function formToRecord(form: FormData): Record<string, string> {
   const out: Record<string, string> = {};
@@ -11,38 +11,67 @@ function formToRecord(form: FormData): Record<string, string> {
   return out;
 }
 
+/** Проверка, что URL доступен снаружи (curl / кнопка «Протестировать» в ЮMoney). */
+export async function GET() {
+  const { wallet, secret } = getYooMoneyConfig();
+  return NextResponse.json({
+    ok: true,
+    message: "YooMoney webhook endpoint. Send POST with form body.",
+    configured: Boolean(wallet && secret),
+    walletSuffix: wallet ? wallet.slice(-4) : null,
+  });
+}
+
 export async function POST(req: Request) {
   const form = await req.formData().catch(() => null);
   if (!form) {
+    console.log("[yoomoney] POST rejected: no form body");
     return new NextResponse("Bad request", { status: 400 });
   }
 
   const allParams = formToRecord(form);
+  const label = allParams.label ?? "";
+  const operationId = allParams.operation_id ?? "";
+
+  console.log(
+    "[yoomoney] POST",
+    `type=${allParams.notification_type}`,
+    `label=${label || "(empty)"}`,
+    `op=${operationId || "(empty)"}`,
+    `amount=${allParams.amount}`,
+    allParams.sign ? "sign=yes" : "sign=no",
+    allParams.sha1_hash ? "sha1=yes" : "sha1=no",
+    allParams.test_notification === "true" ? "test=yes" : "",
+  );
 
   if (allParams.test_notification === "true") {
     if (!verifyYooMoneyNotification(allParams)) {
+      console.log("[yoomoney] test notification: invalid signature");
       return new NextResponse("Invalid hash", { status: 403 });
     }
+    console.log("[yoomoney] test notification: OK");
     return new NextResponse("OK");
   }
 
   if (!verifyYooMoneyNotification(allParams)) {
-    console.warn(
+    const { secret } = getYooMoneyConfig();
+    console.log(
       "[yoomoney] invalid signature",
-      allParams.label,
-      allParams.sign ? "sign" : "sha1",
+      `label=${label}`,
+      `secretSet=${Boolean(secret)}`,
+      `secretLen=${secret?.length ?? 0}`,
     );
     return new NextResponse("Invalid hash", { status: 403 });
   }
 
   const paidAmount = Number.parseFloat(allParams.amount ?? "");
   if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
+    console.log("[yoomoney] invalid amount", allParams.amount);
     return new NextResponse("Invalid amount", { status: 400 });
   }
 
-  const label = allParams.label ?? "";
-  const operationId = allParams.operation_id ?? "";
   if (!label || !operationId) {
+    console.log("[yoomoney] missing label or operation_id — платёж без метки dep_...");
     return new NextResponse("Missing fields", { status: 400 });
   }
 
@@ -65,11 +94,14 @@ export async function POST(req: Request) {
       );
     });
 
+    console.log("[yoomoney] result", label, result);
+
     if (result === "duplicate") {
       return new NextResponse("OK");
     }
   } catch (err) {
     if (err instanceof Error && err.message === "DEPOSIT_NOT_FOUND") {
+      console.log("[yoomoney] unknown label", label);
       return new NextResponse("Unknown label", { status: 404 });
     }
     console.error("[yoomoney] notification error", err);

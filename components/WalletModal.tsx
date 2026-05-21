@@ -59,6 +59,9 @@ export function WalletModal({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Ошибка депозита");
       if (data.promo) setPendingPromo(data.promo);
+      if (data.label) {
+        sessionStorage.setItem("pendingDepositLabel", data.label);
+      }
       window.open(data.paymentUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка");

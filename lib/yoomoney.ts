@@ -1,8 +1,14 @@
 import crypto from "crypto";
 
+/** Убирает кавычки и пробелы из значений .env (частая ошибка на VPS). */
+function cleanEnv(value?: string) {
+  if (!value) return "";
+  return value.trim().replace(/^['"]|['"]$/g, "");
+}
+
 export function getYooMoneyConfig() {
-  const wallet = process.env.YOOMONEY_WALLET?.trim();
-  const secret = process.env.YOOMONEY_SECRET?.trim();
+  const wallet = cleanEnv(process.env.YOOMONEY_WALLET);
+  const secret = cleanEnv(process.env.YOOMONEY_SECRET);
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || "")
     .trim()
     .replace(/\/$/, "");

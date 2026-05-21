@@ -29,6 +29,49 @@ export function Header() {
   useEffect(() => {
     refreshMe();
 
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("deposit") !== "success") return;
+
+    const label = sessionStorage.getItem("pendingDepositLabel");
+    if (!label) return;
+
+    let stopped = false;
+    let attempts = 0;
+    const maxAttempts = 40;
+
+    const poll = async () => {
+      if (stopped || attempts >= maxAttempts) return;
+      attempts += 1;
+
+      const res = await fetch(
+        `/api/wallet/deposit/status?label=${encodeURIComponent(label)}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) return;
+
+      const data = await res.json();
+      if (data.status === "COMPLETED") {
+        stopped = true;
+        sessionStorage.removeItem("pendingDepositLabel");
+        await refreshMe();
+        const url = new URL(window.location.href);
+        url.searchParams.delete("deposit");
+        window.history.replaceState({}, "", url.pathname + url.search);
+        return;
+      }
+
+      window.setTimeout(poll, 3000);
+    };
+
+    poll();
+    return () => {
+      stopped = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    refreshMe();
+
     const onBalance = (event: Event) => {
       const custom = event as CustomEvent<{ balance: number }>;
       setUser((current) =>
