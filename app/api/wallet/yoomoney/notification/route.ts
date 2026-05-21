@@ -7,7 +7,7 @@ import {
   verifyYooMoneyNotification,
 } from "@/lib/yoomoney";
 
-const WEBHOOK_BUILD = "20260520-sign-fallback";
+const WEBHOOK_BUILD = "20260520-credit-full-deposit";
 
 function formToRecord(form: FormData): Record<string, string> {
   const out: Record<string, string> = {};
@@ -75,8 +75,11 @@ export async function POST(req: Request) {
     return new NextResponse("Invalid hash", { status: 403 });
   }
 
-  const paidAmount = Number.parseFloat(allParams.amount ?? "");
-  if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
+  const walletAmount = Number.parseFloat(allParams.amount ?? "");
+  const withdrawRaw = allParams.withdraw_amount?.trim();
+  const withdrawAmount = withdrawRaw ? Number.parseFloat(withdrawRaw) : undefined;
+
+  if (!Number.isFinite(walletAmount) || walletAmount <= 0) {
     console.log("[yoomoney] invalid amount", allParams.amount);
     return new NextResponse("Invalid amount", { status: 400 });
   }
@@ -96,13 +99,12 @@ export async function POST(req: Request) {
         throw new Error("DEPOSIT_NOT_FOUND");
       }
 
-      return completeDepositPayment(
-        tx,
-        deposit,
-        paidAmount,
+      return completeDepositPayment(tx, deposit, {
+        walletAmount,
+        withdrawAmount: Number.isFinite(withdrawAmount) ? withdrawAmount : undefined,
         operationId,
-        `ЮMoney ${operationId}`,
-      );
+        ledgerNote: `ЮMoney ${operationId}`,
+      });
     });
 
     console.log("[yoomoney] result", label, result);
@@ -114,6 +116,13 @@ export async function POST(req: Request) {
     if (err instanceof Error && err.message === "DEPOSIT_NOT_FOUND") {
       console.log("[yoomoney] unknown label", label);
       return new NextResponse("Unknown label", { status: 404 });
+    }
+    if (
+      err instanceof Error &&
+      (err.message === "UNDERPAID" || err.message === "WITHDRAW_AMOUNT_MISMATCH")
+    ) {
+      console.log("[yoomoney] payment rejected", label, err.message);
+      return new NextResponse("Amount mismatch", { status: 400 });
     }
     console.error("[yoomoney] notification error", err);
     return new NextResponse("Error", { status: 500 });

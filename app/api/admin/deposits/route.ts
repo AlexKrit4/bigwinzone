@@ -62,13 +62,12 @@ export async function POST(req: Request) {
 
   try {
     const result = await prisma.$transaction(async (tx) =>
-      completeDepositPayment(
-        tx,
-        deposit,
-        Number(deposit.amount),
-        opId,
-        `Ручное подтверждение (${opId})`,
-      ),
+      completeDepositPayment(tx, deposit, {
+        walletAmount: Number(deposit.amount),
+        withdrawAmount: Number(deposit.amount),
+        operationId: opId,
+        ledgerNote: `Ручное подтверждение (${opId})`,
+      }),
     );
 
     return NextResponse.json({ ok: true, result });
