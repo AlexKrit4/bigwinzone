@@ -1,7 +1,14 @@
 import type { Prisma } from "@prisma/client";
 import { PromoWagerStatus } from "@prisma/client";
+import {
+  balancesResponse,
+  cancelPromoBalances,
+  creditBucket,
+  getUserBalances,
+  releasePromoBalancesToCash,
+  totalBalance,
+} from "@/lib/balances";
 import { isAdminGrantCode } from "@/lib/promo-codes";
-import { creditUserBalance, debitUserBalance } from "@/lib/wallet";
 
 type Tx = Prisma.TransactionClient;
 
@@ -79,7 +86,7 @@ export async function activatePromoForDeposit(tx: Tx, userId: string, code: stri
   });
 }
 
-/** Применить промо после успешного депозита */
+/** После депозита с промо: депозит → promoDeposit, % бонус → bonus. */
 export async function applyPromoOnDeposit(
   tx: Tx,
   depositId: string,
@@ -106,14 +113,25 @@ export async function applyPromoOnDeposit(
     activation.promoCode.wagerMultiplier,
   );
 
+  await creditBucket(
+    tx,
+    userId,
+    "promoDeposit",
+    paidAmount,
+    "PROMO_DEPOSIT",
+    depositId,
+    activation.promoCode.code,
+  );
+
   if (bonus > 0) {
-    await creditUserBalance(
+    await creditBucket(
       tx,
       userId,
+      "bonus",
       bonus,
       "PROMO_DEPOSIT_BONUS",
       activation.id,
-      `Бонус ${activation.promoCode.code} +${activation.promoCode.depositBonusPercent}%`,
+      `+${activation.promoCode.depositBonusPercent}%`,
     );
   }
 
@@ -155,6 +173,7 @@ export async function addWagerProgress(tx: Tx, userId: string, betAmount: number
       Math.round((act.wagerProgress + betAmount) * 100) / 100,
     );
     const done = progress >= act.wagerRequired - 0.001;
+
     await tx.promoActivation.update({
       where: { id: act.id },
       data: {
@@ -163,10 +182,13 @@ export async function addWagerProgress(tx: Tx, userId: string, betAmount: number
         completedAt: done ? new Date() : null,
       },
     });
+
+    if (done) {
+      await releasePromoBalancesToCash(tx, userId);
+    }
   }
 }
 
-/** Отменить активный промо: WAITING_DEPOSIT или WAGERING (бонус списывается с баланса). */
 export async function cancelPromoActivation(
   tx: Tx,
   userId: string,
@@ -179,26 +201,16 @@ export async function cancelPromoActivation(
   if (!activation) throw new Error("NOT_FOUND");
 
   if (activation.status === PromoWagerStatus.CANCELLED) {
-    return { activation, balance: await getUserBalance(tx, userId) };
+    const balances = await getUserBalances(tx, userId);
+    return { activation, ...balancesResponse(balances) };
   }
 
   if (activation.status === PromoWagerStatus.COMPLETED) {
     throw new Error("CANNOT_CANCEL_COMPLETED");
   }
 
-  const bonus = Number(activation.bonusAmount);
-
-  if (activation.status === PromoWagerStatus.WAGERING && bonus > 0) {
-    await debitUserBalance(
-      tx,
-      userId,
-      bonus,
-      "PROMO_CANCEL",
-      activation.id,
-      isAdminGrantCode(activation.promoCode.code)
-        ? `Отмена бонуса ${activation.promoCode.code}`
-        : `Отмена промо ${activation.promoCode.code}`,
-    );
+  if (activation.status === PromoWagerStatus.WAGERING) {
+    await cancelPromoBalances(tx, userId);
 
     const promo = await tx.promoCode.findUnique({
       where: { id: activation.promoCodeId },
@@ -229,17 +241,8 @@ export async function cancelPromoActivation(
     },
   });
 
-  const balance = await getUserBalance(tx, userId);
-  return { activation, balance };
-}
-
-async function getUserBalance(tx: Tx, userId: string) {
-  const user = await tx.user.findUnique({
-    where: { id: userId },
-    select: { balance: true },
-  });
-  if (!user) throw new Error("USER_NOT_FOUND");
-  return Number(user.balance);
+  const balances = await getUserBalances(tx, userId);
+  return { activation, ...balancesResponse(balances) };
 }
 
 export async function assertCanWithdraw(tx: Tx, userId: string) {

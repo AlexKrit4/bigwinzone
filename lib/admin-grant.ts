@@ -1,8 +1,9 @@
 import { PromoWagerStatus } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
+import { balancesResponse, creditBucket, getUserBalances } from "@/lib/balances";
 import { calcWagerRequired, cancelPromoActivation } from "@/lib/promo";
 import { ADMIN_GRANT_CODE_PREFIX } from "@/lib/promo-codes";
-import { creditUserBalance, debitUserBalance } from "@/lib/wallet";
+import { adminRevokeCash } from "@/lib/balances";
 
 type Tx = Prisma.TransactionClient;
 
@@ -25,7 +26,7 @@ export async function findActiveAdminGrants(tx: Tx, userId: string) {
   });
 }
 
-/** Выдать баланс с отыгрышем; пользователь видит код ADM-… как промо. */
+/** ADM-бонус → только бонусный счёт, ставки/выигрыши с бонусного. */
 export async function createAdminGrant(
   tx: Tx,
   userId: string,
@@ -43,6 +44,11 @@ export async function createAdminGrant(
     throw new Error("ADMIN_GRANT_ACTIVE");
   }
 
+  const activePromo = await tx.promoActivation.findFirst({
+    where: { userId, status: PromoWagerStatus.WAGERING },
+  });
+  if (activePromo) throw new Error("WAGER_ACTIVE");
+
   const code = randomAdminCode();
   const wagerRequired =
     wagerMultiplier > 0 ? calcWagerRequired(amount, 0, wagerMultiplier) : 0;
@@ -59,7 +65,7 @@ export async function createAdminGrant(
     },
   });
 
-  await creditUserBalance(tx, userId, amount, "ADMIN_GRANT", promo.id, note);
+  await creditBucket(tx, userId, "bonus", amount, "ADMIN_GRANT", promo.id, note);
 
   const activation = await tx.promoActivation.create({
     data: {
@@ -76,47 +82,16 @@ export async function createAdminGrant(
     include: { promoCode: true },
   });
 
-  const balance = Number(
-    (await tx.user.findUnique({ where: { id: userId }, select: { balance: true } }))
-      ?.balance ?? 0,
-  );
-
-  return { activation, promo, balance, code };
+  const balances = await getUserBalances(tx, userId);
+  return { activation, promo, code, ...balancesResponse(balances) };
 }
 
-/** Списать сумму с баланса; по умолчанию отменяет активные ADM-бонусы. */
+/** Списание только с реальных денег (не трогает бонус/промо). */
 export async function adminRevokeBalance(
   tx: Tx,
   userId: string,
   amount: number,
   note: string,
-  options?: { cancelAdminGrants?: boolean },
 ) {
-  if (!Number.isFinite(amount) || amount <= 0) throw new Error("INVALID_AMOUNT");
-
-  if (options?.cancelAdminGrants !== false) {
-    const grants = await findActiveAdminGrants(tx, userId);
-    for (const g of grants) {
-      await cancelPromoActivation(tx, userId, g.id);
-    }
-  }
-
-  const user = await tx.user.findUnique({
-    where: { id: userId },
-    select: { balance: true },
-  });
-  if (!user) throw new Error("USER_NOT_FOUND");
-
-  const balance = Number(user.balance);
-  const take = Math.min(amount, balance);
-  if (take <= 0) throw new Error("NOTHING_TO_REVOKE");
-
-  await debitUserBalance(tx, userId, take, "ADMIN_REVOKE", undefined, note);
-
-  const after = Number(
-    (await tx.user.findUnique({ where: { id: userId }, select: { balance: true } }))
-      ?.balance ?? 0,
-  );
-
-  return { balance: after, revoked: take };
+  return adminRevokeCash(tx, userId, amount, note);
 }

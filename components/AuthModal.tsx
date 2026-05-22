@@ -7,6 +7,9 @@ export type AuthUser = {
   email: string;
   username: string;
   balance: number;
+  cash?: number;
+  bonus?: number;
+  promoDeposit?: number;
   role?: string;
 };
 

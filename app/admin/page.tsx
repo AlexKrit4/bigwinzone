@@ -16,6 +16,9 @@ type UserRow = {
   email: string;
   role: string;
   balance: number;
+  cash: number;
+  bonus: number;
+  promoDeposit: number;
   createdAt: string;
 };
 
@@ -175,8 +178,11 @@ export default function AdminPage() {
     if (res.ok) load();
   }
 
-  async function quickRevoke(username: string, balance: number) {
-    const raw = prompt(`Сколько списать у ${username}? (баланс ${balance.toFixed(2)})`, String(Math.min(100, balance)));
+  async function quickRevoke(username: string, cash: number) {
+    const raw = prompt(
+      `Списать реальные деньги у ${username}? (сейчас ${cash.toFixed(2)} ₽, бонус/промо не трогаем)`,
+      String(Math.min(100, cash)),
+    );
     if (!raw) return;
     const amount = Number(raw);
     if (!Number.isFinite(amount) || amount <= 0) return;
@@ -310,8 +316,8 @@ export default function AdminPage() {
           </button>
         </form>
         <p className="wallet-hint">
-          Игрок увидит код ADM-… в профиле. Отыгрыш = сумма × вейджер. 0 = без отыгрыша.
-          Отмена промо списывает всю выданную сумму.
+          Сумма на бонусный счёт, код ADM-… в профиле. Отыгрыш = сумма × вейджер.
+          Отмена промо обнуляет бонус.
         </p>
       </section>
 
@@ -337,7 +343,7 @@ export default function AdminPage() {
           </button>
         </form>
         <p className="wallet-hint">
-          Сначала отменяется активный ADM-бонус (вся выданная сумма), затем списывается указанная сумма с баланса.
+          Списание только с реальных денег. Бонусный счёт и депозит под промо не затрагиваются.
         </p>
       </section>
 
@@ -398,7 +404,10 @@ export default function AdminPage() {
                 <th>Ник</th>
                 <th>Email</th>
                 <th>Роль</th>
-                <th>Баланс</th>
+                <th>Всего</th>
+                <th>Реал.</th>
+                <th>Бонус</th>
+                <th>Промо</th>
                 <th></th>
               </tr>
             </thead>
@@ -409,11 +418,14 @@ export default function AdminPage() {
                   <td>{u.email}</td>
                   <td>{u.role}</td>
                   <td>{u.balance.toFixed(2)}</td>
+                  <td>{u.cash.toFixed(2)}</td>
+                  <td>{u.bonus.toFixed(2)}</td>
+                  <td>{u.promoDeposit.toFixed(2)}</td>
                   <td className="admin-actions">
                     <button
                       type="button"
                       className="ghost-btn"
-                      onClick={() => void quickRevoke(u.username, u.balance)}
+                      onClick={() => void quickRevoke(u.username, u.cash)}
                     >
                       Забрать
                     </button>

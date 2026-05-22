@@ -2,6 +2,7 @@ import { WithdrawalStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getUserIdFromCookie } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { balancesResponse, getUserBalances } from "@/lib/balances";
 import { assertCanWithdraw } from "@/lib/promo";
 import { debitUserBalance } from "@/lib/wallet";
 
@@ -68,7 +69,15 @@ export async function POST(req: Request) {
   try {
     const withdrawal = await prisma.$transaction(async (tx) => {
       await assertCanWithdraw(tx, userId);
-      await debitUserBalance(tx, userId, amount, "WITHDRAW_HOLD", undefined, "Заявка на вывод");
+      await debitUserBalance(
+        tx,
+        userId,
+        amount,
+        "WITHDRAW_HOLD",
+        undefined,
+        "Заявка на вывод",
+        "cash",
+      );
 
       return tx.withdrawalRequest.create({
         data: {
@@ -81,14 +90,11 @@ export async function POST(req: Request) {
       });
     });
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { balance: true },
-    });
+    const balances = await prisma.$transaction((tx) => getUserBalances(tx, userId));
 
     return NextResponse.json({
       withdrawal: { id: withdrawal.id, status: withdrawal.status },
-      balance: Number(user?.balance ?? 0),
+      ...balancesResponse(balances),
     });
   } catch (err) {
     if (err instanceof Error && err.message === "INSUFFICIENT_FUNDS") {

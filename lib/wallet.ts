@@ -1,8 +1,15 @@
 import type { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import {
+  type BalanceBucket,
+  creditBucket,
+  debitBucket,
+  getUserBalances,
+  totalBalance,
+} from "@/lib/balances";
 
 type Tx = Prisma.TransactionClient;
 
+/** Зачисление на реальные деньги (депозит без промо, вывод и т.д.). */
 export async function creditUserBalance(
   tx: Tx,
   userId: string,
@@ -10,26 +17,10 @@ export async function creditUserBalance(
   type: string,
   refId?: string,
   note?: string,
+  bucket: BalanceBucket = "cash",
 ) {
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new Error("INVALID_AMOUNT");
-  }
-
-  const user = await tx.user.findUnique({
-    where: { id: userId },
-    select: { balance: true },
-  });
-  if (!user) throw new Error("USER_NOT_FOUND");
-
-  const balanceAfter = Number(user.balance) + amount;
-  await tx.user.update({
-    where: { id: userId },
-    data: { balance: balanceAfter },
-  });
-  await tx.balanceLedger.create({
-    data: { userId, amount, balanceAfter, type, refId, note },
-  });
-  return balanceAfter;
+  const balances = await creditBucket(tx, userId, bucket, amount, type, refId, note);
+  return totalBalance(balances);
 }
 
 export async function debitUserBalance(
@@ -39,28 +30,15 @@ export async function debitUserBalance(
   type: string,
   refId?: string,
   note?: string,
+  bucket: BalanceBucket = "cash",
 ) {
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new Error("INVALID_AMOUNT");
-  }
+  const balances = await debitBucket(tx, userId, bucket, amount, type, refId, note);
+  return totalBalance(balances);
+}
 
-  const user = await tx.user.findUnique({
-    where: { id: userId },
-    select: { balance: true },
-  });
-  if (!user) throw new Error("USER_NOT_FOUND");
-
-  if (Number(user.balance) < amount) throw new Error("INSUFFICIENT_FUNDS");
-
-  const balanceAfter = Number(user.balance) - amount;
-  await tx.user.update({
-    where: { id: userId },
-    data: { balance: balanceAfter },
-  });
-  await tx.balanceLedger.create({
-    data: { userId, amount: -amount, balanceAfter, type, refId, note },
-  });
-  return balanceAfter;
+export async function getTotalBalance(tx: Tx, userId: string) {
+  const b = await getUserBalances(tx, userId);
+  return totalBalance(b);
 }
 
 export function publicUser(user: {
@@ -68,13 +46,22 @@ export function publicUser(user: {
   email: string;
   username: string;
   balance: number | { toString(): string };
+  balanceCash?: number | { toString(): string };
+  balanceBonus?: number | { toString(): string };
+  balancePromoDeposit?: number | { toString(): string };
   role: string;
 }) {
+  const cash = Number(user.balanceCash ?? user.balance);
+  const bonus = Number(user.balanceBonus ?? 0);
+  const promoDeposit = Number(user.balancePromoDeposit ?? 0);
   return {
     id: user.id,
     email: user.email,
     username: user.username,
-    balance: Number(user.balance),
+    balance: totalBalance({ cash, bonus, promoDeposit }),
+    cash,
+    bonus,
+    promoDeposit,
     role: user.role,
   };
 }

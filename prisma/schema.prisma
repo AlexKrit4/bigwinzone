@@ -37,9 +37,13 @@ model User {
   email        String   @unique
   username     String   @unique
   passwordHash String
-  role         UserRole @default(USER)
-  balance      Float    @default(0)
-  createdAt    DateTime @default(now())
+  role                UserRole @default(USER)
+  /** @deprecated Синхронизируется с суммой трёх кошельков; для отображения используйте balances. */
+  balance             Float    @default(0)
+  balanceCash         Float    @default(0)
+  balanceBonus        Float    @default(0)
+  balancePromoDeposit Float    @default(0)
+  createdAt           DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   deposits             Deposit[]

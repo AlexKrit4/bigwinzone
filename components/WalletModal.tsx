@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import type { AuthUser } from "@/components/AuthModal";
+import type { BalanceParts } from "@/components/BalanceBreakdown";
 
 type WalletTab = "deposit" | "withdraw" | "promo";
 
@@ -26,14 +27,14 @@ type WalletModalProps = {
   user: AuthUser;
   initialTab?: WalletTab;
   onClose: () => void;
-  onBalance: (balance: number) => void;
+  onBalancesUpdate: (data: Partial<BalanceParts>) => void;
 };
 
 export function WalletModal({
   user,
   initialTab = "deposit",
   onClose,
-  onBalance,
+  onBalancesUpdate,
 }: WalletModalProps) {
   const [tab, setTab] = useState<WalletTab>(initialTab);
   const [amount, setAmount] = useState("500");
@@ -99,7 +100,7 @@ export function WalletModal({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Ошибка вывода");
-      onBalance(data.balance);
+      onBalancesUpdate(data);
       alert("Заявка на вывод создана. Ожидайте обработки.");
       onClose();
     } catch (err) {
@@ -154,7 +155,7 @@ export function WalletModal({
     }
     setPendingPromo(null);
     setWageringPromos((list) => list.filter((w) => w.id !== activationId));
-    if (typeof data.balance === "number") onBalance(data.balance);
+    onBalancesUpdate(data);
     await loadPendingPromo();
   }
 
@@ -167,7 +168,12 @@ export function WalletModal({
         <p className="eyebrow">Кошелёк</p>
         <h2>{user.username}</h2>
         <p className="wallet-balance-line">
-          Баланс: <strong>{user.balance.toFixed(2)} ₽</strong>
+          Всего: <strong>{user.balance.toFixed(2)} ₽</strong>
+          <span className="wallet-hint">
+            {" "}
+            (реал. {(user.cash ?? user.balance).toFixed(2)} / бонус{" "}
+            {(user.bonus ?? 0).toFixed(2)} / промо {(user.promoDeposit ?? 0).toFixed(2)})
+          </span>
         </p>
 
         <div className="wallet-tabs">

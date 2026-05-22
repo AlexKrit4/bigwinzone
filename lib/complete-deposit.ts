@@ -4,7 +4,6 @@ import { creditUserBalance } from "@/lib/wallet";
 
 type Tx = Prisma.TransactionClient;
 
-/** Допуск комиссии ЮMoney: на кошелёк может прийти меньше, чем сумма депозита. */
 const MAX_COMMISSION_RATIO = 0.05;
 
 export type DepositToComplete = {
@@ -13,18 +12,16 @@ export type DepositToComplete = {
   status: DepositStatus;
   amount: number | { toString(): string };
   externalId: string | null;
+  promoCodeId?: string | null;
 };
 
 export type DepositPaymentInfo = {
-  /** Сумма, зачисленная на кошелёк ЮMoney (после комиссии). */
   walletAmount: number;
-  /** Сумма, списанная с плательщика (если есть в уведомлении). */
   withdrawAmount?: number;
   operationId: string;
   ledgerNote: string;
 };
 
-/** Проверка, что платёж относится к ожидаемому депозиту. */
 export function assertDepositPaymentMatches(
   expected: number,
   walletAmount: number,
@@ -43,10 +40,6 @@ export function assertDepositPaymentMatches(
   }
 }
 
-/**
- * Зачислить на баланс казино полную сумму депозита (expected),
- * даже если на кошелёк ЮMoney пришло меньше из‑за комиссии.
- */
 export async function completeDepositPayment(
   tx: Tx,
   deposit: DepositToComplete,
@@ -74,21 +67,22 @@ export async function completeDepositPayment(
     payment.withdrawAmount,
   );
 
-  if (Math.abs(payment.walletAmount - expected) > 0.01) {
-    console.log(
-      `[deposit] commission: id=${deposit.id} credit=${expected} wallet=${payment.walletAmount}`,
-      payment.withdrawAmount != null ? `paid=${payment.withdrawAmount}` : "",
+  const fullDeposit = await tx.deposit.findUnique({
+    where: { id: deposit.id },
+    select: { promoCodeId: true },
+  });
+
+  if (!fullDeposit?.promoCodeId) {
+    await creditUserBalance(
+      tx,
+      deposit.userId,
+      expected,
+      "DEPOSIT",
+      deposit.id,
+      payment.ledgerNote,
+      "cash",
     );
   }
-
-  await creditUserBalance(
-    tx,
-    deposit.userId,
-    expected,
-    "DEPOSIT",
-    deposit.id,
-    payment.ledgerNote,
-  );
 
   await tx.deposit.update({
     where: { id: deposit.id },
@@ -100,6 +94,9 @@ export async function completeDepositPayment(
     },
   });
 
-  await applyPromoOnDeposit(tx, deposit.id, deposit.userId, expected);
+  if (fullDeposit?.promoCodeId) {
+    await applyPromoOnDeposit(tx, deposit.id, deposit.userId, expected);
+  }
+
   return "completed";
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { setAuthCookie, signUserToken } from "@/lib/auth";
+import { publicUser } from "@/lib/wallet";
 
 export async function POST(req: Request) {
   try {
@@ -33,21 +34,30 @@ export async function POST(req: Request) {
 
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await prisma.user.create({
-      data: { email, username, passwordHash, balance: 0 },
-      select: { id: true, email: true, username: true, balance: true, role: true },
+      data: {
+        email,
+        username,
+        passwordHash,
+        balance: 0,
+        balanceCash: 0,
+        balanceBonus: 0,
+        balancePromoDeposit: 0,
+      },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        balance: true,
+        balanceCash: true,
+        balanceBonus: true,
+        balancePromoDeposit: true,
+        role: true,
+      },
     });
 
     await setAuthCookie(signUserToken(user.id));
 
-    return NextResponse.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        balance: Number(user.balance),
-        role: user.role,
-      },
-    });
+    return NextResponse.json({ user: publicUser(user) });
   } catch (error) {
     console.error("Register error:", error);
     return NextResponse.json(

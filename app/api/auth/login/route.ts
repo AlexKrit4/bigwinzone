@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { setAuthCookie, signUserToken } from "@/lib/auth";
+import { publicUser } from "@/lib/wallet";
 
 export async function POST(req: Request) {
   try {
@@ -25,15 +26,7 @@ export async function POST(req: Request) {
 
     await setAuthCookie(signUserToken(user.id));
 
-    return NextResponse.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        balance: Number(user.balance),
-        role: user.role,
-      },
-    });
+    return NextResponse.json({ user: publicUser(user) });
   } catch (error) {
     console.error("Login error:", error);
     return NextResponse.json(

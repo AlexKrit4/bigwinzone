@@ -1,6 +1,6 @@
-import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getUserIdFromCookie } from "@/lib/auth";
+import { balancesResponse, settleSpin } from "@/lib/balances";
 import { addWagerProgress } from "@/lib/promo";
 import { prisma } from "@/lib/prisma";
 
@@ -27,38 +27,17 @@ export async function POST(req: Request) {
   }
 
   try {
-    const updated = await prisma.$transaction(async (tx) => {
-      const user = await tx.user.findUnique({
-        where: { id: userId },
-        select: { balance: true },
-      });
-
-      if (!user) {
-        throw new Error("USER_NOT_FOUND");
-      }
-
-      if (Number(user.balance) < bet) {
-        throw new Error("INSUFFICIENT_FUNDS");
-      }
-
-      const updated = await tx.user.update({
-        where: { id: userId },
-        data: {
-          balance: {
-            increment: win - bet,
-          },
-        },
-        select: { balance: true },
-      });
-
+    const result = await prisma.$transaction(async (tx) => {
+      const settled = await settleSpin(tx, userId, bet, win);
       if (bet > 0) {
         await addWagerProgress(tx, userId, bet);
       }
-
-      return updated;
+      return settled;
     });
 
-    return NextResponse.json({ balance: Number(updated.balance) });
+    return NextResponse.json({
+      ...balancesResponse(result.balances),
+    });
   } catch (err) {
     if (err instanceof Error && err.message === "INSUFFICIENT_FUNDS") {
       return NextResponse.json({ error: "Недостаточно средств" }, { status: 400 });

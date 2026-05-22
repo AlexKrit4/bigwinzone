@@ -2,6 +2,7 @@ import { PromoWagerStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { isAdminGrantCode } from "@/lib/admin-grant";
 import { getUserIdFromCookie } from "@/lib/auth";
+import { totalBalance, mapUserBalances } from "@/lib/balances";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -13,7 +14,15 @@ export async function GET() {
   const [user, deposits, withdrawals, activations] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { username: true, email: true, balance: true, createdAt: true },
+      select: {
+        username: true,
+        email: true,
+        balance: true,
+        balanceCash: true,
+        balanceBonus: true,
+        balancePromoDeposit: true,
+        createdAt: true,
+      },
     }),
     prisma.deposit.findMany({
       where: { userId },
@@ -51,7 +60,10 @@ export async function GET() {
     user: {
       username: user.username,
       email: user.email,
-      balance: Number(user.balance),
+      balance: totalBalance(mapUserBalances(user)),
+      cash: Number(user.balanceCash),
+      bonus: Number(user.balanceBonus),
+      promoDeposit: Number(user.balancePromoDeposit),
       memberSince: user.createdAt,
     },
     deposits: deposits.map((d) => ({

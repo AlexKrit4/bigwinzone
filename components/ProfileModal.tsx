@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { AuthUser } from "@/components/AuthModal";
+import type { BalanceParts } from "@/components/BalanceBreakdown";
 
 type DepositRow = {
   id: string;
@@ -38,10 +39,10 @@ type PromoRow = {
 type ProfileModalProps = {
   user: AuthUser;
   onClose: () => void;
-  onBalance?: (balance: number) => void;
+  onBalancesUpdate?: (data: Partial<BalanceParts>) => void;
 };
 
-export function ProfileModal({ user, onClose, onBalance }: ProfileModalProps) {
+export function ProfileModal({ user, onClose, onBalancesUpdate }: ProfileModalProps) {
   const [tab, setTab] = useState<"deposits" | "withdrawals" | "promos">("promos");
   const [loading, setLoading] = useState(true);
   const [deposits, setDeposits] = useState<DepositRow[]>([]);
@@ -86,7 +87,7 @@ export function ProfileModal({ user, onClose, onBalance }: ProfileModalProps) {
       setError(data.error || "Не удалось отменить");
       return;
     }
-    if (typeof data.balance === "number") onBalance?.(data.balance);
+    onBalancesUpdate?.(data);
     load();
   }
 
@@ -103,8 +104,13 @@ export function ProfileModal({ user, onClose, onBalance }: ProfileModalProps) {
         <p className="eyebrow">Профиль</p>
         <h2>{user.username}</h2>
         <p className="wallet-balance-line">
-          Баланс: <strong>{user.balance.toFixed(2)} ₽</strong>
+          Всего: <strong>{user.balance.toFixed(2)} ₽</strong>
         </p>
+        <ul className="balance-breakdown-inline">
+          <li>Реальные: {(user.cash ?? user.balance).toFixed(2)} ₽</li>
+          <li>Бонус: {(user.bonus ?? 0).toFixed(2)} ₽</li>
+          <li>Под промо: {(user.promoDeposit ?? 0).toFixed(2)} ₽</li>
+        </ul>
 
         <div className="wallet-tabs">
           <button

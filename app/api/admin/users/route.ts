@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { createAdminGrant, adminRevokeBalance } from "@/lib/admin-grant";
 import { requireAdmin } from "@/lib/admin";
+import { balancesResponse } from "@/lib/balances";
 import { prisma } from "@/lib/prisma";
+import { publicUser } from "@/lib/wallet";
 
 export async function GET() {
   const gate = await requireAdmin();
@@ -18,15 +20,15 @@ export async function GET() {
       username: true,
       role: true,
       balance: true,
+      balanceCash: true,
+      balanceBonus: true,
+      balancePromoDeposit: true,
       createdAt: true,
     },
   });
 
   return NextResponse.json({
-    users: users.map((u) => ({
-      ...u,
-      balance: Number(u.balance),
-    })),
+    users: users.map((u) => publicUser(u)),
   });
 }
 
@@ -61,7 +63,7 @@ export async function POST(req: Request) {
           tx,
           target.id,
           amount,
-          note || "Списание админом",
+          note || "Списание админом (реальные деньги)",
         ),
       );
       return NextResponse.json({
@@ -69,7 +71,7 @@ export async function POST(req: Request) {
         action: "revoke",
         username: target.username,
         revoked: result.revoked,
-        balance: result.balance,
+        ...balancesResponse(result.balances),
       });
     }
 
@@ -92,17 +94,22 @@ export async function POST(req: Request) {
       ok: true,
       action: "grant",
       username: target.username,
-      balance: result.balance,
       code: result.code,
       wagerRequired: result.activation.wagerRequired,
+      ...balancesResponse({
+        cash: result.cash,
+        bonus: result.bonus,
+        promoDeposit: result.promoDeposit,
+      }),
     });
   } catch (err) {
     const map: Record<string, string> = {
       INVALID_AMOUNT: "Некорректная сумма",
       INVALID_WAGER: "Некорректный вейджер",
-      ADMIN_GRANT_ACTIVE: "У игрока уже есть активный ADM-бонус — сначала отмените или спишите",
-      NOTHING_TO_REVOKE: "Нечего списать (баланс 0)",
-      INSUFFICIENT_FUNDS: "Недостаточно средств для списания бонуса",
+      ADMIN_GRANT_ACTIVE: "У игрока уже есть активный ADM-бонус",
+      WAGER_ACTIVE: "У игрока активен промокод — сначала отмените или отыграйте",
+      NOTHING_TO_REVOKE: "Нет реальных денег для списания",
+      INSUFFICIENT_FUNDS: "Недостаточно средств",
     };
     const msg =
       err instanceof Error ? map[err.message] || "Ошибка операции" : "Ошибка операции";

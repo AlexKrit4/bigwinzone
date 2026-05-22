@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getUserIdFromCookie } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { publicUser } from "@/lib/wallet";
 
 export async function GET() {
   const userId = await getUserIdFromCookie();
@@ -10,17 +11,21 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, username: true, balance: true, role: true },
+    select: {
+      id: true,
+      email: true,
+      username: true,
+      balance: true,
+      balanceCash: true,
+      balanceBonus: true,
+      balancePromoDeposit: true,
+      role: true,
+    },
   });
 
   if (!user) {
     return NextResponse.json({ user: null }, { status: 401 });
   }
 
-  return NextResponse.json({
-    user: {
-      ...user,
-      balance: Number(user.balance),
-    },
-  });
+  return NextResponse.json({ user: publicUser(user) });
 }

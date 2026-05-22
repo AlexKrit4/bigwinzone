@@ -3,8 +3,26 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AuthModal, AuthUser } from "@/components/AuthModal";
+import { BalanceBreakdown, type BalanceParts } from "@/components/BalanceBreakdown";
 import { ProfileModal } from "@/components/ProfileModal";
 import { WalletModal } from "@/components/WalletModal";
+
+function toBalanceParts(user: AuthUser): BalanceParts {
+  return {
+    balance: user.balance,
+    cash: user.cash ?? user.balance,
+    bonus: user.bonus ?? 0,
+    promoDeposit: user.promoDeposit ?? 0,
+  };
+}
+
+function applyBalanceUpdate(user: AuthUser, data: Partial<BalanceParts>): AuthUser {
+  const cash = data.cash ?? user.cash ?? 0;
+  const bonus = data.bonus ?? user.bonus ?? 0;
+  const promoDeposit = data.promoDeposit ?? user.promoDeposit ?? 0;
+  const balance = data.balance ?? cash + bonus + promoDeposit;
+  return { ...user, cash, bonus, promoDeposit, balance };
+}
 
 export function Header() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -24,6 +42,21 @@ export function Header() {
 
     const data = await res.json();
     setUser(data.user);
+  }
+
+  function emitBalance(parts: BalanceParts) {
+    window.dispatchEvent(
+      new CustomEvent("casino:balance", { detail: parts }),
+    );
+  }
+
+  function onBalancesUpdate(data: Partial<BalanceParts>) {
+    setUser((u) => {
+      if (!u) return u;
+      const next = applyBalanceUpdate(u, data);
+      emitBalance(toBalanceParts(next));
+      return next;
+    });
   }
 
   useEffect(() => {
@@ -73,9 +106,10 @@ export function Header() {
     refreshMe();
 
     const onBalance = (event: Event) => {
-      const custom = event as CustomEvent<{ balance: number }>;
+      const custom = event as CustomEvent<BalanceParts>;
+      if (!custom.detail) return;
       setUser((current) =>
-        current ? { ...current, balance: custom.detail.balance } : current,
+        current ? applyBalanceUpdate(current, custom.detail) : current,
       );
     };
 
@@ -106,7 +140,10 @@ export function Header() {
             <>
               <div className="user-pill">
                 <span>{user.username}</span>
-                <strong>{user.balance.toFixed(2)}</strong>
+                <BalanceBreakdown
+                  parts={toBalanceParts(user)}
+                  onRefresh={() => void refreshMe()}
+                />
               </div>
               <button
                 type="button"
@@ -167,12 +204,7 @@ export function Header() {
         <ProfileModal
           user={user}
           onClose={() => setProfileOpen(false)}
-          onBalance={(balance) => {
-            setUser((u) => (u ? { ...u, balance } : u));
-            window.dispatchEvent(
-              new CustomEvent("casino:balance", { detail: { balance } }),
-            );
-          }}
+          onBalancesUpdate={onBalancesUpdate}
         />
       )}
       {walletOpen && user && (
@@ -180,12 +212,7 @@ export function Header() {
           user={user}
           initialTab={walletTab}
           onClose={() => setWalletOpen(false)}
-          onBalance={(balance) => {
-            setUser((u) => (u ? { ...u, balance } : u));
-            window.dispatchEvent(
-              new CustomEvent("casino:balance", { detail: { balance } }),
-            );
-          }}
+          onBalancesUpdate={onBalancesUpdate}
         />
       )}
     </>

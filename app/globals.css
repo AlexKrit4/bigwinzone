@@ -788,3 +788,64 @@ body.casino-play-active .site-footer {
 .promo-wagering-row:last-child {
   margin-bottom: 0;
 }
+
+.balance-breakdown {
+  position: relative;
+  display: inline-block;
+}
+
+.balance-breakdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.balance-breakdown-caret {
+  font-size: 0.65rem;
+  opacity: 0.7;
+}
+
+.balance-breakdown-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 50;
+  min-width: 220px;
+  margin: 0;
+  padding: 8px 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+.balance-breakdown-menu li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  font-size: 0.88rem;
+}
+
+.balance-breakdown-menu li span {
+  color: var(--muted);
+}
+
+.balance-breakdown-inline {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.balance-breakdown-inline li {
+  margin-bottom: 4px;
+}

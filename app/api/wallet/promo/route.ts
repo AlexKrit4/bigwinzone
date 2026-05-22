@@ -2,6 +2,7 @@ import { PromoWagerStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getUserIdFromCookie } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { balancesResponse } from "@/lib/balances";
 import { isAdminGrantCode } from "@/lib/admin-grant";
 import { activatePromoForDeposit, cancelPromoActivation } from "@/lib/promo";
 
@@ -98,10 +99,10 @@ export async function DELETE(req: Request) {
 
   try {
     if (activationId) {
-      const { balance } = await prisma.$transaction((tx) =>
+      const result = await prisma.$transaction((tx) =>
         cancelPromoActivation(tx, userId, activationId),
       );
-      return NextResponse.json({ ok: true, balance });
+      return NextResponse.json({ ok: true, ...result });
     }
 
     await prisma.promoActivation.updateMany({
@@ -109,12 +110,10 @@ export async function DELETE(req: Request) {
       data: { status: PromoWagerStatus.CANCELLED },
     });
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { balance: true },
-    });
+    const { getUserBalances } = await import("@/lib/balances");
+    const balances = await prisma.$transaction((tx) => getUserBalances(tx, userId));
 
-    return NextResponse.json({ ok: true, balance: Number(user?.balance ?? 0) });
+    return NextResponse.json({ ok: true, ...balancesResponse(balances) });
   } catch (err) {
     const map: Record<string, string> = {
       NOT_FOUND: "Промокод не найден",
