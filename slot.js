@@ -1116,8 +1116,13 @@ function applySpinPresetToState(spin) {
                 console.warn('[BOOK] Неверный индекс символа в книге', r, row, ix);
                 return false;
             }
-            currentBoard[r][row] = SYMBOLS[ix];
-            currentBoardMult[r][row] = Number(wrow[row]) || 1;
+            let sym = SYMBOLS[ix];
+            const mult = Number(wrow[row]) || 1;
+            if (sym === 'split' && row === 2 && mult >= 2) {
+                sym = 'split_wilds';
+            }
+            currentBoard[r][row] = sym;
+            currentBoardMult[r][row] = mult;
         }
     }
     return true;
@@ -1481,8 +1486,19 @@ function symbolImageSrc(symbolName) {
     return `images/${name}.png`;
 }
 
-function normalizeDisplaySymbol(symbolName) {
-    return symbolName === 'split_wilds' ? 'split' : symbolName;
+function setSymbolCellVisual(cell, symbolName) {
+    if (!cell || !symbolName) return;
+    const src = symbolImageSrc(symbolName);
+    const img = cell.querySelector('img');
+    if (img) {
+        img.src = src;
+        img.alt = symbolName;
+        return;
+    }
+    if (cell.classList.contains('symbol--cached-bg')) {
+        cell.style.backgroundImage = `url(${src})`;
+        cell.dataset.symbol = symbolName;
+    }
 }
 
 function reelTransformY(el, offsetPx) {
@@ -1546,8 +1562,7 @@ function initSymbolDomPool() {
 }
 
 function cloneSymbolCell(symbolName) {
-    const display = normalizeDisplaySymbol(symbolName);
-    const key = SYMBOLS.includes(display) ? display : symbolName;
+    const key = SYMBOLS.includes(symbolName) ? symbolName : 'high1';
     const tpl = symbolTemplateByName.get(key) || symbolTemplateByName.get('high1');
     return tpl ? tpl.cloneNode(true) : createSymbolElement(symbolName, 1);
 }
@@ -1616,12 +1631,7 @@ function initReels() {
 // Создание элемента символа
 function createSymbolElement(symbolName, mult = 1) {
     const div = cloneSymbolCell(symbolName);
-    if (mult > 1) {
-        const badge = document.createElement('span');
-        badge.className = 'symbol-mult';
-        badge.textContent = `x${mult}`;
-        div.appendChild(badge);
-    }
+    appendSymbolCellExtras(div, { mult });
     return div;
 }
 
@@ -3003,7 +3013,7 @@ function spinEnhancerReel(reelIndex, enhancerSymbolIndex, extraDurationMs = 0, s
         const stripFrag = document.createDocumentFragment();
         
         const rawFinalName = SYMBOLS[enhancerSymbolIndex] || enhancerSymbolIndex;
-        const landingSymbolName = rawFinalName === 'split_wilds' ? 'split' : rawFinalName;
+        const landingSymbolName = rawFinalName;
         const landingCell = cloneSymbolCell(landingSymbolName);
 
         const multEligible =
@@ -3011,7 +3021,7 @@ function spinEnhancerReel(reelIndex, enhancerSymbolIndex, extraDurationMs = 0, s
                 ? null
                 : (Number(resolvedBottomWeight) || 1);
 
-        if (multEligible != null && multEligible > 1 && landingSymbolName !== 'split' && landingSymbolName !== 'xWays') {
+        if (multEligible != null && multEligible > 1 && landingSymbolName !== 'split_wilds' && landingSymbolName !== 'split' && landingSymbolName !== 'xWays') {
             if (!['wild', 'split'].includes(landingSymbolName) && [1, 2, 3].includes(reelIndex)) {
                 appendExtrasHtml(landingCell, `<span class="symbol-mult">x${multEligible}</span>`);
             }
@@ -3174,10 +3184,10 @@ function spinReel(reelIndex, finalSymbols, extraDurationMs = 0, scrollVPxPerMs, 
         // 1) Финальные символы (будут видны в конце)
         for (let i = 0; i < numVisible; i++) {
             const rawName = SYMBOLS[finalSymbols[i]];
-            const displayName = rawName === 'split_wilds' ? 'split' : rawName;
+            const displayName = rawName;
             const cell = cloneSymbolCell(displayName);
             const wm = finalWeightsRow?.[i];
-            if (wm != null && Number(wm) > 1) {
+            if (wm != null && Number(wm) > 1 && displayName !== 'split_wilds') {
                 appendExtrasHtml(cell, `<span class="symbol-mult">x${wm}</span>`);
             }
             if (displayName === 'scatter' && isBonusGame) {
@@ -3428,10 +3438,11 @@ async function resolveSplitsAndUpdateBoardAnimated() {
             const splitEl = enhancerContent ? enhancerContent.querySelectorAll('.symbol')[0] : null;
             
             if (splitEl) {
-                splitEl.innerHTML = symbolImgTag('split_wilds');
-                splitEl.style.transition = 'transform 0.15s ease-out';
-                splitEl.style.transform = 'scale(1.15)';
-                setTimeout(() => splitEl.style.transform = 'scale(1)', 150);
+                const fresh = cloneSymbolCell('split_wilds');
+                fresh.style.transition = 'transform 0.15s ease-out';
+                fresh.style.transform = 'scale(1.15)';
+                splitEl.replaceWith(fresh);
+                setTimeout(() => { fresh.style.transform = 'scale(1)'; }, 150);
             }
 
             // Add +2 to persistent multiplier if reel is 1, 2, or 3
@@ -3505,28 +3516,25 @@ async function resolveXWaysAndUpdateBoardAnimated(presetSpin = null) {
 
         if (!el) continue;
 
-        const img = el.querySelector('img');
         const oldBadge = el.querySelector('.symbol-mult');
         if (oldBadge) oldBadge.remove();
 
-        targets.push({ ...pos, el, img });
+        targets.push({ ...pos, el });
     }
 
     // Пауза после остановки
     await sleep(500);
 
-    // Мерцание: переключаем src xWays <-> replacement
-    const flickerDuration = 420;
-    const flickerStep = 70;
+    // Мерцание: переключаем xWays <-> replacement (img и symbol--cached-bg)
+    const flickerDuration = 560;
+    const flickerStep = 80;
     const steps = Math.max(1, Math.floor(flickerDuration / flickerStep));
     let showReplacement = false;
 
     for (let i = 0; i < steps; i++) {
         showReplacement = !showReplacement;
         for (const t of targets) {
-            if (!t.img) continue;
-            t.img.src = showReplacement ? `images/${replacementSymbol}.png` : 'images/xWays.png';
-            t.img.alt = showReplacement ? replacementSymbol : 'xWays';
+            setSymbolCellVisual(t.el, showReplacement ? replacementSymbol : 'xWays');
         }
         // eslint-disable-next-line no-await-in-loop
         await sleep(flickerStep);
@@ -3553,10 +3561,7 @@ async function resolveXWaysAndUpdateBoardAnimated(presetSpin = null) {
         currentBoard[t.reel][t.row] = finalSym;
         currentBoardMult[t.reel][t.row] = finalMult;
 
-        if (t.img) {
-            t.img.src = `images/${finalSym}.png`;
-            t.img.alt = finalSym;
-        }
+        setSymbolCellVisual(t.el, finalSym);
 
         if (finalSym !== 'split_wilds' && finalMult > 1) {
             const badge = document.createElement('span');
@@ -3569,11 +3574,7 @@ async function resolveXWaysAndUpdateBoardAnimated(presetSpin = null) {
             const reelEl = document.getElementById(`reel${t.reel}`);
             const reelSymbol = reelEl?.querySelector('.reel-content')?.querySelectorAll('.symbol')?.[2];
             if (reelSymbol) {
-                const img = reelSymbol.querySelector('img');
-                if (img) {
-                    img.src = `images/${finalSym}.png`;
-                    img.alt = finalSym;
-                }
+                setSymbolCellVisual(reelSymbol, finalSym);
                 const oldReelBadge = reelSymbol.querySelector('.symbol-mult');
                 if (oldReelBadge) oldReelBadge.remove();
                 if (finalSym !== 'split_wilds' && finalMult > 1) {
