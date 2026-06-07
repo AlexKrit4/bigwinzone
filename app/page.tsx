@@ -36,6 +36,11 @@ export default function HomePage() {
             title="Rave Slot"
             description="xWays, бонусные окошки, split wilds и рейвовая Big Win презентация."
           />
+          <GameCard
+            href="/play/xboot"
+            title="Red Devil"
+            description="Das xBoot-style: барабаны 2-3-4-4-3-2, xWays и xNudge, подводная тема."
+          />
         </div>
       </section>
 

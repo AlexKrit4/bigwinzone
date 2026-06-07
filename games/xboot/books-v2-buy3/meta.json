@@ -1,0 +1,37 @@
+{
+  "format": "BOOKS_XBOOT_V2_BUY",
+  "version": 2,
+  "buyType": "buy3",
+  "scatterCount": 3,
+  "totalBooks": 3000000,
+  "shardSize": 1000000,
+  "recordSize": 64,
+  "spinCostMult": 75,
+  "targetRtpPct": 96.03,
+  "measuredRtpPct": 90.5483,
+  "avgTotalWinAtBet1": 67.9113,
+  "maxWinAtBet1": 55199.9883,
+  "maxWinBookId": 168676,
+  "noSyntheticMaxWin": true,
+  "seedIdPrefix": "xbb3",
+  "shards": [
+    {
+      "id": 0,
+      "file": "shard_000.bin",
+      "startId": 0,
+      "count": 1000000
+    },
+    {
+      "id": 1,
+      "file": "shard_001.bin",
+      "startId": 1000000,
+      "count": 1000000
+    },
+    {
+      "id": 2,
+      "file": "shard_002.bin",
+      "startId": 2000000,
+      "count": 1000000
+    }
+  ]
+}

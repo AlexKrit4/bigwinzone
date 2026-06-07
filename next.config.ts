@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
         source: "/books-api/:path*",
         destination: "http://127.0.0.1:3847/:path*",
       },
+      {
+        source: "/xboot-books-api/:path*",
+        destination: "http://127.0.0.1:3848/:path*",
+      },
     ];
   },
 };

@@ -51,6 +51,7 @@ model User {
   ledger               BalanceLedger[]
   promoActivations     PromoActivation[]
   processedWithdrawals WithdrawalRequest[] @relation("WithdrawalProcessor")
+  bigWins              BigWin[]
 }
 
 model Deposit {
@@ -145,4 +146,24 @@ model BalanceLedger {
 
   @@index([userId, createdAt])
   @@index([type])
+}
+
+model BigWin {
+  id         String   @id @default(cuid())
+  userId     String
+  game       String   @default("xboot")
+  gameTitle  String   @default("Red Devil")
+  bet        Float
+  win        Float
+  multiplier Float
+  bookSeed   String?
+  bookIndex  Int?
+  scatterBuy Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([game, multiplier, createdAt])
+  @@index([userId, game, multiplier, createdAt])
+  @@index([game, win, createdAt])
 }

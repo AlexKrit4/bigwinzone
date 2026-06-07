@@ -1,0 +1,1 @@
+import { PrismaClient } from '@prisma/client'; import { recordBigWinIfEligible } from './lib/big-wins'; const p = new PrismaClient(); p.user.findFirst().then(u => recordBigWinIfEligible(p, u.id, {bet: 0, win: 10, effectiveBet: 1})).then(console.log).catch(console.error);

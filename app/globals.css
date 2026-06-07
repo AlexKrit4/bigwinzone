@@ -386,6 +386,58 @@ body.casino-play-active .site-footer {
   box-shadow: var(--shadow), 0 0 40px rgba(83, 244, 255, 0.12);
 }
 
+.play-frame-wrap {
+  position: relative;
+}
+
+.play-shell-loader {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 40%, rgba(12, 72, 110, 0.35), transparent 70%),
+    linear-gradient(180deg, #041018 0%, #061820 100%);
+}
+
+.play-shell-loader-card {
+  text-align: center;
+  padding: 24px;
+}
+
+.play-shell-loader-title {
+  margin: 0;
+  font-size: clamp(1.6rem, 5vw, 2.2rem);
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  color: #f5c842;
+}
+
+.play-shell-loader-sub {
+  margin: 8px 0 18px;
+  color: rgba(232, 244, 255, 0.75);
+  font-size: 0.9rem;
+}
+
+.play-shell-loader-spinner {
+  display: inline-block;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid rgba(245, 200, 66, 0.25);
+  border-top-color: #f5c842;
+  animation: play-shell-spin 0.85s linear infinite;
+}
+
+@keyframes play-shell-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .play-page--mobile .slot-frame {
   display: block;
   min-height: 100dvh;
@@ -393,6 +445,13 @@ body.casino-play-active .site-footer {
   border: none;
   border-radius: 0;
   box-shadow: none;
+}
+
+.play-page--mobile .play-frame-wrap,
+.play-page--mobile .play-shell-loader {
+  min-height: 100dvh;
+  height: 100dvh;
+  border-radius: 0;
 }
 
 .play-shell--immersive .play-toolbar {
@@ -414,6 +473,13 @@ body.casino-play-active .site-footer {
   border: none;
   border-radius: 0;
   box-shadow: none;
+}
+
+.play-page--xboot .slot-frame {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
 }
 
 .site-footer {
