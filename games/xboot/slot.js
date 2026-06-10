@@ -3059,7 +3059,7 @@
       }
       return pay;
     }
-    if (pay > 0) await settle(0, pay, getWinSettleMeta());
+    if (pay > 0) await settle(0, pay, { ...getWinSettleMeta(), skipBigWinRecord: true });
     if (activeBookSession) {
       activeBookSession.sessionPaid = getBookSessionPaid() + pay;
     }
@@ -3071,7 +3071,7 @@
     const cap = getMaxWinCapAmount();
     const remainder = Math.max(0, cap - getBookSessionPaid());
     if (remainder <= 0.001) return 0;
-    await settle(0, remainder, getWinSettleMeta());
+    await settle(0, remainder, { ...getWinSettleMeta(), skipBigWinRecord: true });
     if (activeBookSession) {
       activeBookSession.sessionPaid = cap;
     }
@@ -4583,7 +4583,12 @@
             `Общий выигрыш: ${bonusTotalWin.toFixed(2)}`
           );
         }
-        activeBookSession = null;
+      }
+      if (activeBookSession && getBookSessionPaid() > 0) {
+        await settle(0, getBookSessionPaid(), { ...getWinSettleMeta(), recordBigWinOnly: true });
+      }
+      activeBookSession = null;
+      if (!maxWinEnded) {
         await exitBonusMode();
       }
     } finally {
@@ -4635,8 +4640,10 @@
     if (replayMode) return;
 
     if (!casinoApiAvailable) {
-      balance += win - bet;
-      notifyBalance();
+      if (!meta.recordBigWinOnly) {
+        balance += win - bet;
+        notifyBalance();
+      }
       return;
     }
 
@@ -4647,14 +4654,22 @@
 
     const result = await CASINO_API.settleSpin(bet, win, payload);
     if (result?.ok) {
-      balance = Number(result.balance) || balance;
+      if (!meta.recordBigWinOnly) {
+        balance = Number(result.balance) || balance;
+      }
     } else if (result?.status === 401) {
       casinoApiAvailable = false;
-      balance = Math.round((balance + win - bet) * 100) / 100;
+      if (!meta.recordBigWinOnly) {
+        balance = Math.round((balance + win - bet) * 100) / 100;
+      }
     } else {
-      balance = Math.round((balance + win - bet) * 100) / 100;
+      if (!meta.recordBigWinOnly) {
+        balance = Math.round((balance + win - bet) * 100) / 100;
+      }
     }
-    notifyBalance();
+    if (!meta.recordBigWinOnly) {
+      notifyBalance();
+    }
   }
 
   function initGoldRain() {
@@ -5669,6 +5684,10 @@
         await runBonusSession(bonusEntry, b, m);
         return;
       }
+
+      if (activeBookSession && getBookSessionPaid() > 0) {
+        await settle(0, getBookSessionPaid(), { ...getWinSettleMeta(), recordBigWinOnly: true });
+      }
     } catch {
       await loadBalance();
     } finally {
@@ -5816,13 +5835,15 @@
     });
   }
 
-  function preloadAudio(url) {
+  function preloadAudio(file) {
     return new Promise((resolve) => {
-      const a = new Audio(url);
+      const a = ensureSlotSoundCached(file);
       const done = () => resolve();
+      if (a.readyState >= 4) {
+        return resolve();
+      }
       a.addEventListener('canplaythrough', done, { once: true });
       a.addEventListener('error', done, { once: true });
-      a.preload = 'auto';
       a.load();
       setTimeout(done, 1200);
     });
@@ -5870,10 +5891,7 @@
     ];
 
     const audioTasks = audioFiles.map((file) => {
-      const a = new Audio(soundUrl(file));
-      a.preload = 'auto';
-      slotSoundCache[file] = a;
-      return preloadAudio(soundUrl(file));
+      return preloadAudio(file);
     });
 
     await Promise.all([...imageTasks, ...audioTasks]);

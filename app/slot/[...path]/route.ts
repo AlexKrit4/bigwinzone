@@ -41,10 +41,15 @@ export async function GET(_req: Request, context: RouteContext) {
     const file = await readFile(filePath);
     const ext = path.extname(filePath).toLowerCase();
 
+    const isAsset = [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ogg", ".mp3", ".wav"].includes(ext);
+    const cacheControl = isAsset 
+      ? "public, max-age=31536000, immutable" 
+      : "no-store, must-revalidate";
+
     return new Response(file, {
       headers: {
         "Content-Type": MIME_TYPES[ext] ?? "application/octet-stream",
-        "Cache-Control": "no-store, must-revalidate",
+        "Cache-Control": cacheControl,
       },
     });
   } catch {

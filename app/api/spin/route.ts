@@ -15,6 +15,8 @@ export async function POST(req: Request) {
   const bet = Number(body?.bet ?? 0);
   const win = Number(body?.win ?? 0);
   const effectiveBet = Number(body?.effectiveBet ?? bet);
+  const skipBigWinRecord = Boolean(body?.skipBigWinRecord);
+  const recordBigWinOnly = Boolean(body?.recordBigWinOnly);
 
   if (!Number.isFinite(bet) || bet < 0) {
     return NextResponse.json({ error: "Invalid bet" }, { status: 400 });
@@ -25,19 +27,22 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      if (bet === 0 && win === 0) {
-        const balances = await getUserBalances(tx, userId);
-        return { balances, total: totalBalance(balances) };
-      }
-      const settled = await settleSpin(tx, userId, bet, win);
-      if (bet > 0) {
-        await addWagerProgress(tx, userId, bet);
-      }
-      return settled;
-    });
+    let result = null;
+    if (!recordBigWinOnly) {
+      result = await prisma.$transaction(async (tx) => {
+        if (bet === 0 && win === 0) {
+          const balances = await getUserBalances(tx, userId);
+          return { balances, total: totalBalance(balances) };
+        }
+        const settled = await settleSpin(tx, userId, bet, win);
+        if (bet > 0) {
+          await addWagerProgress(tx, userId, bet);
+        }
+        return settled;
+      });
+    }
 
-    if (win > 0) {
+    if (win > 0 && !skipBigWinRecord) {
       try {
         await recordBigWinIfEligible(prisma, userId, {
           bet,
@@ -58,8 +63,12 @@ export async function POST(req: Request) {
       }
     }
 
+    if (recordBigWinOnly) {
+      return NextResponse.json({ ok: true });
+    }
+
     return NextResponse.json({
-      ...balancesResponse(result.balances),
+      ...balancesResponse(result!.balances),
     });
   } catch (err) {
     if (err instanceof Error && err.message === "INSUFFICIENT_FUNDS") {
