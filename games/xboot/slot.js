@@ -1209,10 +1209,19 @@
     }
   }
 
-  /** Ways на барабане: поле + (при полной торпеде) символ под слотом на том же барабане. */
+  /** Ячейка wild4 после улёта символа в торпеду — не считается отдельным way на барабане. */
+  function isTorpedoSupplementDropRow(reel, row) {
+    const slot = torpedoSlotForReel(reel);
+    if (slot < 0) return false;
+    const dropRow = torpedoDropRows[slot];
+    return dropRow != null && row === dropRow && torpedoSlots[slot] != null;
+  }
+
+  /** Ways на барабане: поле + (при полной торпеде) доп. символ в слоте торпеды. */
   function countWaysOnReel(sym, b, m, reel) {
     let count = 0;
     for (let row = 0; row < getReelRows(reel); row++) {
+      if (isTorpedoSupplementDropRow(reel, row)) continue;
       if (cellMatches(sym, b[reel][row])) count += m[reel][row] || 1;
     }
     if (torpedoResolved) {
@@ -1270,6 +1279,7 @@
           }
         }
         for (let row = 0; row < getReelRows(r); row++) {
+          if (isTorpedoSupplementDropRow(r, row)) continue;
           if (!cellMatches(sym, b[r][row])) continue;
           const key = `${r}:${row}`;
           if (highlightKeys.has(key)) continue;
@@ -2685,13 +2695,7 @@
 
     for (const pos of highlights || []) {
       if (pos.torpedoSlot != null) {
-        const slot = pos.torpedoSlot;
-        add(getTorpedoCells()[slot]);
-        const reel = BONUS4_TORPEDO_REELS[slot];
-        const row = torpedoDropRows[slot];
-        if (reel != null && row != null && row >= 0) {
-          add(getWinHighlightTarget(reel, row));
-        }
+        add(getTorpedoCells()[pos.torpedoSlot]);
         continue;
       }
       if (pos.reel == null || pos.row == null) continue;
@@ -5388,10 +5392,8 @@
     updateHud(paid.toFixed(2));
     updateBonusHud();
 
-    if (paid > 0 && paid >= BIG_WIN_MIN_MULT * bet) {
+    if (paid > 0) {
       await showWinPresentation({ ...winInfo, totalWin: paid });
-    } else if (paid > 0) {
-      applyWinHighlights(winInfo.highlights);
     } else {
       document.getElementById('winLine').textContent =
         winInfo.totalWays > 0 ? `Ways: ${winInfo.totalWays}` : '';
