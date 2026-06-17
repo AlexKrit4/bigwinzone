@@ -47,7 +47,6 @@
   const XNUDGE_STACK_SIZE = 4;
   const NUDGE_PUSH_WINDUP_MS = 100;
   const NUDGE_PUSH_MS = 340;
-  const NUDGE_EXPAND_MS = 480;
   const NUDGE_PUSH_WINDUP_FRAC = 0.12;
   const NUDGE_PUSH_WINDUP_MAX_PX = 12;
   const XNUDGE_LAND_CHANCE = 0.14;
@@ -3925,29 +3924,11 @@
 
   async function animateBonusTargetNudgeHit(b, m, targetRow, targetMult) {
     const reel = BONUS_EXPAND_REEL;
-    const rows = getReelRows(reel);
     bonusTargetNudgeArtReel = true;
     for (let row = 0; row <= targetRow; row++) b[reel][row] = 'xNudge';
     renderReelStrip(reel, b[reel], m[reel]);
 
-    reelNudgeMult[reel] = 1;
-    updateReelNudgeMultDisplay(reel, 1);
-
-    await sleep(350);
-    playSlotSound(SOUND_NUDGE);
-
-    let visible = targetRow + 1;
-    let reelMult = 1;
-    const nudgesNeeded = Math.max(0, targetMult - 1);
-    for (let n = 0; n < nudgesNeeded; n++) {
-      reelMult += 1;
-      reelNudgeMult[reel] = reelMult;
-      const expandRow = Math.min(visible, rows - 1);
-      await animateNudgePushToRow(reel, b, m[reel], expandRow, reelMult);
-      visible = Math.min(rows, getXNudgeVisibleCount(b[reel]));
-      await sleep(160);
-    }
-
+    await animateNudgeStepPushes(reel, b, m[reel], targetMult);
     await swapNudgeReelToWild(reel, b, m[reel]);
     await sleep(220);
   }
@@ -4427,8 +4408,9 @@
       renderReelStrip(reel, b[reel], m[reel]);
       await sleep(400);
 
-      reelNudgeMult[reel] = targetMult;
-      await animateNudgeExpandToFull(reel, b, m[reel], targetMult);
+      await animateNudgeStepPushes(reel, b, m[reel], targetMult, {
+        collapseDropped: true
+      });
 
       await swapNudgeReelToWild(reel, b, m[reel]);
     }
@@ -4729,7 +4711,7 @@
     return next;
   }
 
-  /** TARGET: пошаговый толчок барабана (wind-up → 1 ячейка вниз). */
+  /** Пошаговый толчок барабана (wind-up → 1 ячейка вниз). */
   async function animateNudgePushToRow(reel, b, mRow, expandRow, mult) {
     const drum = getReelDrum(reel);
     const content = getReelContent(reel);
@@ -4807,105 +4789,55 @@
     await sleep(120);
   }
 
-  /** С текущей позиции (½, ¾, 1 ряд…) — один раз на весь барабан. */
-  async function animateNudgeExpandToFull(reel, b, mRow, finalMult) {
-    const drum = getReelDrum(reel);
-    const content = getReelContent(reel);
-    if (!drum || !content) return;
-
-    const h = getSymbolHeight();
+  /** Пошаговый nudge (wind-up → 1 ряд вниз), как при попадании TARGET. */
+  async function animateNudgeStepPushes(reel, b, mRow, finalMult, opts = {}) {
     const rows = getReelRows(reel);
-    const prev = b[reel].map((s) => s);
-    const landInfo = getXNudgeLandInfo(prev);
-    const fromV = getXNudgeVisibleCount(prev) || landInfo?.visible || 0;
-    const fromTopPx = landInfo?.dropped ? landInfo.anchorRow * h : 0;
-    const toV = Math.min(rows, getXNudgeStackSize(reel));
+    let visible = getXNudgeVisibleCount(b[reel]);
+    const landInfo = getXNudgeLandInfo(b[reel]);
 
-    const windUpPx = Math.min(
-      Math.round(h * NUDGE_PUSH_WINDUP_FRAC),
-      NUDGE_PUSH_WINDUP_MAX_PX
-    );
-    const host = getNudgeStackHost(reel);
-
-    renderReelContent(reel, prev, mRow, 0);
-    forceReflowStrip(drum);
-
-    let layer = host.querySelector(':scope > .xnudge-stack:not(.xnudge-strip-stack)');
-    if (!layer) {
-      layer = createXNudgeStackElement();
-      host.insertBefore(layer, content);
+    if (opts.collapseDropped && landInfo?.dropped && landInfo.anchorRow >= 0) {
+      for (let row = 0; row <= landInfo.anchorRow; row++) b[reel][row] = 'xNudge';
+      visible = landInfo.anchorRow + 1;
+      renderReelStrip(reel, b[reel], mRow);
     }
-    layer.classList.add('xnudge-stack--pushing');
-    applyXNudgeStackFullFile(layer, fromV, fromTopPx, reel);
 
-    setStripCompositing(drum, true);
-    drum.classList.add('nudge-drum-pushing');
-    reelTransformY(drum, 0);
+    reelNudgeMult[reel] = 1;
+    updateReelNudgeMultDisplay(reel, 1);
 
-    await new Promise((resolve) => {
-      const start = performance.now();
-      const tick = (now) => {
-        const t = Math.min((now - start) / NUDGE_PUSH_WINDUP_MS, 1);
-        reelTransformY(drum, Math.round(windUpPx * easeOutCubic(t)));
-        if (t < 1) requestAnimationFrame(tick);
-        else resolve();
-      };
-      requestAnimationFrame(tick);
-    });
+    await sleep(350);
+    playSlotSound(SOUND_NUDGE);
 
-    playSlotSound(SOUND_NUDGE_BAM);
+    let reelMult = 1;
+    const nudgesNeeded = Math.max(0, finalMult - 1);
+    visible = Math.max(visible, getXNudgeVisibleCount(b[reel]));
 
-    await new Promise((resolve) => {
-      const start = performance.now();
-      const tick = (now) => {
-        const t = Math.min((now - start) / NUDGE_EXPAND_MS, 1);
-        const eased = easeOutCubic(t);
-        const vis = fromV + (toV - fromV) * eased;
-        const topPx = fromTopPx + (0 - fromTopPx) * eased;
-        // Только стопка растёт; drum не давит вниз — иначе +1 лишняя ячейка.
-        const drumOffset = Math.round(windUpPx * (1 - eased));
-
-        applyXNudgeStackFullFile(layer, vis, topPx, reel);
-        reelTransformY(drum, drumOffset);
-
-        if (t >= 1) {
-          reelTransformY(drum, 0);
-          setStripCompositing(drum, false);
-          drum.classList.remove('nudge-drum-pushing');
-          layer.classList.remove('xnudge-stack--pushing');
-          resolve();
-          return;
-        }
-
-        requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-    });
-
-    bumpReelNudgeMultDisplay(reel);
-    updateReelNudgeMultDisplay(reel, finalMult);
-    await sleep(160);
+    for (let n = 0; n < nudgesNeeded; n++) {
+      reelMult += 1;
+      reelNudgeMult[reel] = reelMult;
+      const expandRow = Math.min(visible, rows - 1);
+      await animateNudgePushToRow(reel, b, mRow, expandRow, reelMult);
+      visible = Math.min(rows, getXNudgeVisibleCount(b[reel]));
+      await sleep(160);
+    }
   }
 
   async function animateXNudge(b, m, stacks) {
     for (const { reel, visible: initialVisible } of stacks) {
-      const rows = getReelRows(reel);
-      const maxVisible = Math.min(getXNudgeStackSize(reel), rows);
-      const finalMult = Math.max(1, maxVisible);
+      const maxVisible = Math.min(getXNudgeStackSize(reel), getReelRows(reel));
 
       reelNudgeMult[reel] = 1;
       updateReelNudgeMultDisplay(reel, 1);
 
       if (initialVisible >= maxVisible) {
+        reelNudgeMult[reel] = maxVisible;
+        updateReelNudgeMultDisplay(reel, maxVisible);
         await swapNudgeReelToWild(reel, b, m[reel]);
         continue;
       }
 
       renderReelStrip(reel, b[reel], m[reel]);
-      await sleep(400);
-
-      reelNudgeMult[reel] = finalMult;
-      await animateNudgeExpandToFull(reel, b, m[reel], finalMult);
+      const finalMult = maxVisible - initialVisible + 1;
+      await animateNudgeStepPushes(reel, b, m[reel], finalMult);
 
       await swapNudgeReelToWild(reel, b, m[reel]);
     }

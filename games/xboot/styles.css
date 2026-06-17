@@ -231,7 +231,7 @@ body.embedded-slot .play-hide {
   content: '';
   position: absolute;
   inset: 4px;
-  border-radius: 8px;
+  border-radius: 0;
   border: 2px solid rgba(245, 200, 66, 0.9);
   box-shadow:
     0 0 14px rgba(245, 200, 66, 0.45),
@@ -251,7 +251,7 @@ body.embedded-slot .play-hide {
   content: '';
   position: absolute;
   inset: 3px;
-  border-radius: 8px;
+  border-radius: 0;
   border: 2px solid rgba(255, 248, 210, 0.95);
   box-shadow:
     0 0 18px rgba(255, 255, 220, 0.75),
@@ -368,13 +368,13 @@ body.embedded-slot .play-hide {
   width: 100%;
   z-index: 2;
   pointer-events: none;
-  border-radius: 8px;
+  border-radius: 0;
   overflow: visible;
   background-color: transparent;
 }
 
 .reel-content .xnudge-strip-stack {
-  border-radius: 8px;
+  border-radius: 0;
   z-index: 2;
 }
 
@@ -388,7 +388,7 @@ body.embedded-slot .play-hide {
 .symbol.xnudge-spin-cluster {
   flex-shrink: 0;
   width: 100%;
-  border-radius: 8px;
+  border-radius: 0;
   box-shadow: 0 0 10px rgba(255, 171, 64, 0.35);
   background-color: rgba(8, 32, 44, 0.45);
 }
@@ -422,7 +422,7 @@ body.embedded-slot .play-hide {
   position: relative;
   isolation: isolate;
   background: linear-gradient(180deg, rgba(12, 50, 68, 0.5), rgba(4, 18, 28, 0.85));
-  border-radius: 6px;
+  border-radius: 0;
   box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.45);
 }
 
@@ -447,7 +447,7 @@ html.slot-spin-active .reel-viewport {
   width: 100%;
   height: var(--sym-h);
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: 0;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -528,7 +528,7 @@ html.slot-spin-active .reel-viewport {
 .torpedo-cell {
   width: var(--sym-h);
   height: var(--sym-h);
-  border-radius: 8px;
+  border-radius: 0;
   border: 2px solid rgba(245, 200, 66, 0.35);
   background: rgba(4, 22, 32, 0.72);
   box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.45);
@@ -575,7 +575,7 @@ html.slot-spin-active .reel-viewport {
 }
 
 .xnudge-stack.bigwin-prelude-highlight::after {
-  border-radius: 8px;
+  border-radius: 0;
 }
 
 .torpedo-fly {
@@ -807,7 +807,7 @@ html.slot-spin-active .reel-viewport {
   content: '';
   position: absolute;
   inset: 3px;
-  border-radius: 8px;
+  border-radius: 0;
   border: 2px solid rgba(143, 212, 255, 0.95);
   box-shadow:
     0 0 12px rgba(143, 212, 255, 0.55),
