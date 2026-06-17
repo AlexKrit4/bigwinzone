@@ -206,6 +206,9 @@ function spinRecordToClientSpin(spin) {
   for (let r = 0; r < NUM_REELS; r++) {
     out[`reel${r}`] = spin.reelIndices?.[r] || spin[`reel${r}`];
   }
+  if (spin.torpedoDrops?.length) out.torpedoDrops = spin.torpedoDrops;
+  if (spin.torpedoComplete) out.torpedoComplete = true;
+  if (spin.torpedoResolved) out.torpedoResolved = spin.torpedoResolved;
   return out;
 }
 
