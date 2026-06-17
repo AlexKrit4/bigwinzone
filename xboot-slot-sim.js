@@ -351,9 +351,17 @@ function makeSimCtx(rng, opts = {}) {
     }
   }
 
-  function countWaysOnReel(sym, b, m, reel, torpedoResolved) {
+  function isTorpedoSupplementDropRow(reel, row, torpedoSlots, torpedoDropRows) {
+    const slot = BONUS4_TORPEDO_REELS.indexOf(reel);
+    if (slot < 0) return false;
+    const dropRow = torpedoDropRows?.[slot];
+    return dropRow != null && row === dropRow && torpedoSlots?.[slot] != null;
+  }
+
+  function countWaysOnReel(sym, b, m, reel, torpedoResolved, torpedoSlots, torpedoDropRows) {
     let count = 0;
     for (let row = 0; row < getReelRows(reel); row++) {
+      if (isTorpedoSupplementDropRow(reel, row, torpedoSlots, torpedoDropRows)) continue;
       if (cellMatches(sym, b[reel][row])) count += m[reel][row] || 1;
     }
     if (torpedoResolved) {
@@ -366,7 +374,15 @@ function makeSimCtx(rng, opts = {}) {
     return count;
   }
 
-  function calculateWaysWin(bet, b, m, reelNudgeMult, torpedoResolved = null) {
+  function calculateWaysWin(
+    bet,
+    b,
+    m,
+    reelNudgeMult,
+    torpedoResolved = null,
+    torpedoSlots = null,
+    torpedoDropRows = null
+  ) {
     let totalWin = 0;
     for (const sym of PAYABLE) {
       let reelsMatched = 0;
@@ -374,7 +390,15 @@ function makeSimCtx(rng, opts = {}) {
       let nudgeLineMult = 1;
 
       for (let r = 0; r < NUM_REELS; r++) {
-        const countOnReel = countWaysOnReel(sym, b, m, r, torpedoResolved);
+        const countOnReel = countWaysOnReel(
+          sym,
+          b,
+          m,
+          r,
+          torpedoResolved,
+          torpedoSlots,
+          torpedoDropRows
+        );
         if (countOnReel === 0) break;
         reelsMatched++;
         ways *= countOnReel;
@@ -401,7 +425,7 @@ function makeSimCtx(rng, opts = {}) {
     return n;
   }
 
-  function processTorpedoDrops(b, m, torpedoSlots) {
+  function processTorpedoDrops(b, m, torpedoSlots, torpedoDropRows) {
     for (const reel of BONUS4_TORPEDO_REELS) {
       const slot = BONUS4_TORPEDO_REELS.indexOf(reel);
       if (torpedoSlots[slot] != null) continue;
@@ -409,6 +433,7 @@ function makeSimCtx(rng, opts = {}) {
         const sym = b[reel][row];
         if (sym === 'xways4' || sym === 'xwild4') {
           torpedoSlots[slot] = sym;
+          torpedoDropRows[slot] = row;
           b[reel][row] = 'wild4';
           m[reel][row] = 1;
           break;
@@ -605,11 +630,20 @@ function simulateBonus4Spin(ctx, torpedoSlots, spinTag) {
   ctx.resolveXNudge(b, m, reelNudgeMult);
 
   const torpedoDrops = collectTorpedoDrops(b, torpedoSlots, ctx.activeReelRows);
-  const torpedoFull = ctx.processTorpedoDrops(b, m, torpedoSlots);
+  const torpedoDropRows = [null, null, null, null];
+  const torpedoFull = ctx.processTorpedoDrops(b, m, torpedoSlots, torpedoDropRows);
   let torpedoResolved = null;
   if (torpedoFull) torpedoResolved = ctx.resolveTorpedo(torpedoSlots);
 
-  const win = ctx.calculateWaysWin(1, b, m, reelNudgeMult, torpedoResolved);
+  const win = ctx.calculateWaysWin(
+    1,
+    b,
+    m,
+    reelNudgeMult,
+    torpedoResolved,
+    torpedoSlots,
+    torpedoDropRows
+  );
   const record = ctx.makeSpinRecord(b, m, reelNudgeMult, spinTag);
   record.win = win;
   if (torpedoDrops.length) record.torpedoDrops = torpedoDrops;
