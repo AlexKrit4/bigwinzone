@@ -604,6 +604,7 @@ function simulateBonus4Spin(ctx, torpedoSlots, spinTag) {
   ctx.resolveXWays(b, m);
   ctx.resolveXNudge(b, m, reelNudgeMult);
 
+  const torpedoDrops = collectTorpedoDrops(b, torpedoSlots, ctx.activeReelRows);
   const torpedoFull = ctx.processTorpedoDrops(b, m, torpedoSlots);
   let torpedoResolved = null;
   if (torpedoFull) torpedoResolved = ctx.resolveTorpedo(torpedoSlots);
@@ -611,12 +612,34 @@ function simulateBonus4Spin(ctx, torpedoSlots, spinTag) {
   const win = ctx.calculateWaysWin(1, b, m, reelNudgeMult, torpedoResolved);
   const record = ctx.makeSpinRecord(b, m, reelNudgeMult, spinTag);
   record.win = win;
+  if (torpedoDrops.length) record.torpedoDrops = torpedoDrops;
+  if (torpedoFull) {
+    record.torpedoComplete = true;
+    record.torpedoResolved = torpedoResolved;
+  }
 
   if (torpedoFull) {
     for (let i = 0; i < torpedoSlots.length; i++) torpedoSlots[i] = null;
   }
 
   return { spinRecord: record, bonusWin: win, torpedoFull };
+}
+
+function collectTorpedoDrops(b, torpedoSlots, reelRows = BASE_REEL_ROWS) {
+  const drops = [];
+  for (const reel of BONUS4_TORPEDO_REELS) {
+    const slot = BONUS4_TORPEDO_REELS.indexOf(reel);
+    if (torpedoSlots[slot] != null) continue;
+    const rows = reelRows[reel] ?? BASE_REEL_ROWS[reel];
+    for (let row = 0; row < rows; row++) {
+      const sym = b[reel][row];
+      if (sym === 'xways4' || sym === 'xwild4') {
+        drops.push({ slot, reel, row, sym });
+        break;
+      }
+    }
+  }
+  return drops;
 }
 
 function simulateBonusGame(scatterCount, bookId, makeSpinSeed) {

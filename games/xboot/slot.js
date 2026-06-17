@@ -10,7 +10,8 @@
   const SYMBOLS = [
     'low1', 'low2', 'low3', 'low4', 'low5',
     'high1', 'high2', 'high3', 'high4', 'high5',
-    'scatter', 'xWays', 'xNudge', 'wild', 'target'
+    'scatter', 'xWays', 'xNudge', 'wild', 'target',
+    'wild4', 'xways4', 'xwild4'
   ];
 
   const PAYOUTS = {
@@ -3765,6 +3766,43 @@
     await sleep(TORPEDO_RESOLVE_MS);
   }
 
+  function applyBookTorpedoLandingBoard(b, m, drops) {
+    if (!drops?.length) return;
+    for (const drop of drops) {
+      const reel = Number(drop.reel);
+      const row = Number(drop.row);
+      const sym = drop.sym;
+      if (!sym || reel < 0 || row < 0 || !b[reel]) continue;
+      b[reel][row] = sym;
+      if (m[reel]) m[reel][row] = 1;
+    }
+  }
+
+  function applyTorpedoResolvedFromBook(resolved) {
+    if (!Array.isArray(resolved)) return;
+    torpedoResolved = resolved.map((entry) =>
+      entry ? { sym: entry.sym, mult: Number(entry.mult) || 2, reel: entry.reel } : null
+    );
+    for (let slot = 0; slot < torpedoResolved.length; slot++) {
+      const entry = torpedoResolved[slot];
+      if (entry) updateTorpedoResolvedPiece(slot, entry.sym, entry.mult);
+    }
+  }
+
+  async function replayBookTorpedoDrops(b, m, drops, preset) {
+    for (const drop of drops) {
+      playSlotSound(SOUND_WAYS);
+      await animateTorpedoFall(drop.reel, drop.row, drop.sym, b, m);
+    }
+    const full = !!preset?.torpedoComplete || torpedoIsFull();
+    if (full && preset?.torpedoResolved) {
+      applyTorpedoResolvedFromBook(preset.torpedoResolved);
+      playSlotSound(SOUND_XWAYS);
+      await sleep(TORPEDO_RESOLVE_MS);
+    }
+    return full;
+  }
+
   async function processBonus4TorpedoDrops(b, m) {
     const drops = [];
     for (const reel of BONUS4_TORPEDO_REELS) {
@@ -5422,6 +5460,7 @@
     const jackpotBuild = fromBook && maxWinBook && spinIndex >= 0 && spinIndex < 4;
     const jackpotFinal = fromBook && maxWinBook && spinIndex === 6;
     const runLiveMechanics = !fromBook || jackpotBuild || jackpotFinal;
+    const bookTorpedoDrops = fromBook ? bookPreset.torpedoDrops || [] : [];
 
     let b;
     let m;
@@ -5437,6 +5476,10 @@
       raw = bookSetup.raw;
       bookTargetNudge = bookSetup.bookTargetNudge;
       needsBookNudge = bookSetup.needsBookNudge;
+      if (bookTorpedoDrops.length) {
+        applyBookTorpedoLandingBoard(b, m, bookTorpedoDrops);
+        raw = b.map((col) => [...col]);
+      }
     } else {
       reelNudgeMult = [1, 1, 1, 1, 1, 1];
       resetAllReelNudgeDisplays();
@@ -5473,16 +5516,22 @@
       if (shouldNudgeAnim) {
         if (fromBook) restoreBookBoardForNudgeAnim(b, m, bookTargetNudge);
         await runBookNudgeAnimation(b, m, bookTargetNudge);
-      } else if (runLiveMechanics) {
-        const xwInfo = resolveXWays(b, m);
-        if (xwInfo.positions.length) await animateXWays(b, m, xwInfo);
+      } else if (runLiveMechanics || bookTorpedoDrops.length) {
+        if (runLiveMechanics) {
+          const xwInfo = resolveXWays(b, m);
+          if (xwInfo.positions.length) await animateXWays(b, m, xwInfo);
 
-        const nudgeStacks = detectXNudgeStacks(b);
-        if (nudgeStacks.length) await animateXNudge(b, m, nudgeStacks);
+          const nudgeStacks = detectXNudgeStacks(b);
+          if (nudgeStacks.length) await animateXNudge(b, m, nudgeStacks);
+        }
 
-        torpedoCompleted = await processBonus4TorpedoDrops(b, m);
-        if (torpedoCompleted) {
-          await animateTorpedoCompleteOnLane();
+        if (fromBook && bookTorpedoDrops.length) {
+          torpedoCompleted = await replayBookTorpedoDrops(b, m, bookTorpedoDrops, bookPreset);
+        } else if (runLiveMechanics) {
+          torpedoCompleted = await processBonus4TorpedoDrops(b, m);
+          if (torpedoCompleted) {
+            await animateTorpedoCompleteOnLane();
+          }
         }
       }
     } finally {
