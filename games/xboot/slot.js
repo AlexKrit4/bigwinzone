@@ -1331,19 +1331,10 @@
     }
   }
 
-  /** Ячейка wild4 после улёта символа в торпеду — не считается отдельным way на барабане. */
-  function isTorpedoSupplementDropRow(reel, row) {
-    const slot = torpedoSlotForReel(reel);
-    if (slot < 0) return false;
-    const dropRow = torpedoDropRows[slot];
-    return dropRow != null && row === dropRow && torpedoSlots[slot] != null;
-  }
-
-  /** Ways на барабане: поле + (при полной торпеде) доп. символ в слоте торпеды. */
+  /** Ways на барабане: символы поля (включая wild4) + доп. символ в слоте торпеды при полной сборке. */
   function countWaysOnReel(sym, b, m, reel) {
     let count = 0;
     for (let row = 0; row < getReelRows(reel); row++) {
-      if (isTorpedoSupplementDropRow(reel, row)) continue;
       if (cellMatches(sym, b[reel][row])) count += m[reel][row] || 1;
     }
     if (torpedoResolved) {
@@ -1401,7 +1392,6 @@
           }
         }
         for (let row = 0; row < getReelRows(r); row++) {
-          if (isTorpedoSupplementDropRow(r, row)) continue;
           if (!cellMatches(sym, b[r][row])) continue;
           const key = `${r}:${row}`;
           if (highlightKeys.has(key)) continue;

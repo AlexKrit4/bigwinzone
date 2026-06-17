@@ -351,17 +351,9 @@ function makeSimCtx(rng, opts = {}) {
     }
   }
 
-  function isTorpedoSupplementDropRow(reel, row, torpedoSlots, torpedoDropRows) {
-    const slot = BONUS4_TORPEDO_REELS.indexOf(reel);
-    if (slot < 0) return false;
-    const dropRow = torpedoDropRows?.[slot];
-    return dropRow != null && row === dropRow && torpedoSlots?.[slot] != null;
-  }
-
   function countWaysOnReel(sym, b, m, reel, torpedoResolved, torpedoSlots, torpedoDropRows) {
     let count = 0;
     for (let row = 0; row < getReelRows(reel); row++) {
-      if (isTorpedoSupplementDropRow(reel, row, torpedoSlots, torpedoDropRows)) continue;
       if (cellMatches(sym, b[reel][row])) count += m[reel][row] || 1;
     }
     if (torpedoResolved) {
