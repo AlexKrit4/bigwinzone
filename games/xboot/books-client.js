@@ -109,21 +109,37 @@
   async function getBySeed(seed, scatterGuarantee = 0) {
     const raw = encodeURIComponent(String(seed).trim());
     const scatter = scatterGuarantee === 3 || scatterGuarantee === 4 ? scatterGuarantee : 0;
-    try {
-      const data = await apiFetch(`/api/book/seed/${raw}?scatter=${scatter}`);
+    const fetchSeed = async (scatterParam) => {
+      const data = await apiFetch(`/api/book/seed/${raw}?scatter=${scatterParam}`);
       return normalizeEntry(data.entry);
+    };
+    try {
+      return await fetchSeed(scatter);
     } catch {
-      return null;
+      if (scatter === 0) return null;
+      try {
+        return await fetchSeed(0);
+      } catch {
+        return null;
+      }
     }
   }
 
   async function getByIndex(index, scatterGuarantee = 0) {
     const scatter = scatterGuarantee === 3 || scatterGuarantee === 4 ? scatterGuarantee : 0;
-    try {
-      const data = await apiFetch(`/api/book/index/${Number(index)}?scatter=${scatter}`);
+    const fetchIndex = async (scatterParam) => {
+      const data = await apiFetch(`/api/book/index/${Number(index)}?scatter=${scatterParam}`);
       return normalizeEntry(data.entry);
+    };
+    try {
+      return await fetchIndex(scatter);
     } catch {
-      return null;
+      if (scatter === 0) return null;
+      try {
+        return await fetchIndex(0);
+      } catch {
+        return null;
+      }
     }
   }
 
