@@ -10,7 +10,8 @@
   const SYMBOLS = [
     'low1', 'low2', 'low3', 'low4', 'low5',
     'high1', 'high2', 'high3', 'high4', 'high5',
-    'scatter', 'xWays', 'xNudge', 'wild', 'target'
+    'scatter', 'xWays', 'xNudge', 'wild', 'target',
+    'wild4', 'xways4', 'xwild4'
   ];
 
   const PAYOUTS = {
@@ -47,7 +48,6 @@
   const XNUDGE_STACK_SIZE = 4;
   const NUDGE_PUSH_WINDUP_MS = 100;
   const NUDGE_PUSH_MS = 340;
-  const NUDGE_EXPAND_MS = 480;
   const NUDGE_PUSH_WINDUP_FRAC = 0.12;
   const NUDGE_PUSH_WINDUP_MAX_PX = 12;
   const XNUDGE_LAND_CHANCE = 0.14;
@@ -84,9 +84,16 @@
   const SPIN_DURATION = 2000;
   const REEL_START_STAGGER_MS = 100;
   const REEL_STOP_STAGGER_MS = 300;
+  const REEL_STOP_STAGGER_FAST_MS = 80;
+  const REEL_START_STAGGER_FAST_MS = 40;
   const REEL_SPIN_LINEAR_FRAC = 0.86;
   const REEL_SPIN_BASE_LINEAR_MS = 900;
+  const REEL_SPIN_BASE_LINEAR_FAST_MS = 520;
   const REEL_DECEL_MS = 120;
+  const REEL_DECEL_FAST_MS = 70;
+  const SKIP_APPEAR_DELAY_MS = 400;
+  const FAST_FORWARD_STAGGER_MS = 50;
+  const XBOOT_TURBO_STORAGE_KEY = 'xbootFastReelStop';
   /** Ways-tease: +N ms к таймингу остановки; барабан крутится дальше (без паузы ленты). */
   const WAYS_TEASE_INTER_REEL_MS = 500;
   const WAYS_TEASE_MIN_REELS = 3;
@@ -186,6 +193,13 @@
   let cachedSymbolHeightPx = 0;
   const spinAnimators = new Set();
   let spinAnimRafId = 0;
+  /** Турбо: быстрее остановка барабанов (кнопка ⚡). */
+  let fastReelStopMode = false;
+  let turboReelsToggleBound = false;
+  let spinSkipReady = false;
+  let spinSkipAppearTimeout = null;
+  /** @type {Array<object|null>} */
+  let activeReelControllers = [];
   const CASINO_API = {
     async getBalance() {
       const res = await fetch('/api/balance', { credentials: 'include' });
@@ -730,6 +744,114 @@
 
   function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
+  }
+
+  function getReelStopStaggerMs() {
+    return fastReelStopMode ? REEL_STOP_STAGGER_FAST_MS : REEL_STOP_STAGGER_MS;
+  }
+
+  function getReelStartStaggerMs() {
+    return fastReelStopMode ? REEL_START_STAGGER_FAST_MS : REEL_START_STAGGER_MS;
+  }
+
+  function getReelSpinBaseLinearMs() {
+    return fastReelStopMode ? REEL_SPIN_BASE_LINEAR_FAST_MS : REEL_SPIN_BASE_LINEAR_MS;
+  }
+
+  function getReelDecelMs() {
+    return fastReelStopMode ? REEL_DECEL_FAST_MS : REEL_DECEL_MS;
+  }
+
+  function syncTurboReelsBtn() {
+    const btn = document.getElementById('turboReelsBtn');
+    if (!btn) return;
+    btn.classList.toggle('active', fastReelStopMode);
+    btn.setAttribute('aria-pressed', fastReelStopMode ? 'true' : 'false');
+  }
+
+  function initTurboReelsToggle() {
+    const btn = document.getElementById('turboReelsBtn');
+    if (!btn) return;
+    try {
+      fastReelStopMode = localStorage.getItem(XBOOT_TURBO_STORAGE_KEY) === '1';
+    } catch (_) {
+      fastReelStopMode = false;
+    }
+    syncTurboReelsBtn();
+    if (turboReelsToggleBound) return;
+    turboReelsToggleBound = true;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      ensureBgMusicStarted();
+      fastReelStopMode = !fastReelStopMode;
+      try {
+        localStorage.setItem(XBOOT_TURBO_STORAGE_KEY, fastReelStopMode ? '1' : '0');
+      } catch (_) {}
+      syncTurboReelsBtn();
+    });
+  }
+
+  function syncSpinSkipUi() {
+    const frame = document.querySelector('.reels-frame');
+    if (!frame) return;
+    frame.classList.toggle('spin-skip-ready', isSpinning && spinSkipReady);
+    frame.classList.toggle('spin-skip-armed', isSpinning && !spinSkipReady);
+  }
+
+  function beginReelSpinSkip() {
+    if (spinSkipAppearTimeout) {
+      clearTimeout(spinSkipAppearTimeout);
+      spinSkipAppearTimeout = null;
+    }
+    spinSkipReady = false;
+    syncSpinSkipUi();
+    spinSkipAppearTimeout = setTimeout(() => {
+      spinSkipAppearTimeout = null;
+      if (isSpinning) {
+        spinSkipReady = true;
+        syncSpinSkipUi();
+      }
+    }, SKIP_APPEAR_DELAY_MS);
+  }
+
+  function clearReelSpinSkip() {
+    spinSkipReady = false;
+    if (spinSkipAppearTimeout) {
+      clearTimeout(spinSkipAppearTimeout);
+      spinSkipAppearTimeout = null;
+    }
+    syncSpinSkipUi();
+  }
+
+  function requestSpinFastForward() {
+    if (!isSpinning || !spinSkipReady) return;
+
+    spinSkipReady = false;
+    syncSpinSkipUi();
+
+    let fastDelay = 0;
+    const now = performance.now();
+    const pending = activeReelControllers
+      .filter((c) => c && !c.finished && !c.fast)
+      .sort((a, b) => a.reelIndex - b.reelIndex);
+
+    for (const c of pending) {
+      if (!c.started) {
+        if (c.startTimeoutId) {
+          clearTimeout(c.startTimeoutId);
+          c.startTimeoutId = null;
+        }
+        c.startAnimation?.();
+      }
+      if (!c.started) continue;
+
+      const elapsed = performance.now() - c.startPerf;
+      c.offAtFastStart =
+        typeof c.readOffset === 'function' ? c.readOffset(elapsed) : c.currentOffset || 0;
+      c.fast = true;
+      c.fastStart = now + fastDelay;
+      fastDelay += FAST_FORWARD_STAGGER_MS;
+    }
   }
 
   async function sleepUnlessSkipped(ms, skipCtrl, flag) {
@@ -3644,6 +3766,43 @@
     await sleep(TORPEDO_RESOLVE_MS);
   }
 
+  function applyBookTorpedoLandingBoard(b, m, drops) {
+    if (!drops?.length) return;
+    for (const drop of drops) {
+      const reel = Number(drop.reel);
+      const row = Number(drop.row);
+      const sym = drop.sym;
+      if (!sym || reel < 0 || row < 0 || !b[reel]) continue;
+      b[reel][row] = sym;
+      if (m[reel]) m[reel][row] = 1;
+    }
+  }
+
+  function applyTorpedoResolvedFromBook(resolved) {
+    if (!Array.isArray(resolved)) return;
+    torpedoResolved = resolved.map((entry) =>
+      entry ? { sym: entry.sym, mult: Number(entry.mult) || 2, reel: entry.reel } : null
+    );
+    for (let slot = 0; slot < torpedoResolved.length; slot++) {
+      const entry = torpedoResolved[slot];
+      if (entry) updateTorpedoResolvedPiece(slot, entry.sym, entry.mult);
+    }
+  }
+
+  async function replayBookTorpedoDrops(b, m, drops, preset) {
+    for (const drop of drops) {
+      playSlotSound(SOUND_WAYS);
+      await animateTorpedoFall(drop.reel, drop.row, drop.sym, b, m);
+    }
+    const full = !!preset?.torpedoComplete || torpedoIsFull();
+    if (full && preset?.torpedoResolved) {
+      applyTorpedoResolvedFromBook(preset.torpedoResolved);
+      playSlotSound(SOUND_XWAYS);
+      await sleep(TORPEDO_RESOLVE_MS);
+    }
+    return full;
+  }
+
   async function processBonus4TorpedoDrops(b, m) {
     const drops = [];
     for (const reel of BONUS4_TORPEDO_REELS) {
@@ -3925,29 +4084,11 @@
 
   async function animateBonusTargetNudgeHit(b, m, targetRow, targetMult) {
     const reel = BONUS_EXPAND_REEL;
-    const rows = getReelRows(reel);
     bonusTargetNudgeArtReel = true;
     for (let row = 0; row <= targetRow; row++) b[reel][row] = 'xNudge';
     renderReelStrip(reel, b[reel], m[reel]);
 
-    reelNudgeMult[reel] = 1;
-    updateReelNudgeMultDisplay(reel, 1);
-
-    await sleep(350);
-    playSlotSound(SOUND_NUDGE);
-
-    let visible = targetRow + 1;
-    let reelMult = 1;
-    const nudgesNeeded = Math.max(0, targetMult - 1);
-    for (let n = 0; n < nudgesNeeded; n++) {
-      reelMult += 1;
-      reelNudgeMult[reel] = reelMult;
-      const expandRow = Math.min(visible, rows - 1);
-      await animateNudgePushToRow(reel, b, m[reel], expandRow, reelMult);
-      visible = Math.min(rows, getXNudgeVisibleCount(b[reel]));
-      await sleep(160);
-    }
-
+    await animateNudgeStepPushes(reel, b, m[reel], targetMult);
     await swapNudgeReelToWild(reel, b, m[reel]);
     await sleep(220);
   }
@@ -4427,8 +4568,9 @@
       renderReelStrip(reel, b[reel], m[reel]);
       await sleep(400);
 
-      reelNudgeMult[reel] = targetMult;
-      await animateNudgeExpandToFull(reel, b, m[reel], targetMult);
+      await animateNudgeStepPushes(reel, b, m[reel], targetMult, {
+        collapseDropped: true
+      });
 
       await swapNudgeReelToWild(reel, b, m[reel]);
     }
@@ -4729,7 +4871,7 @@
     return next;
   }
 
-  /** TARGET: пошаговый толчок барабана (wind-up → 1 ячейка вниз). */
+  /** Пошаговый толчок барабана (wind-up → 1 ячейка вниз). */
   async function animateNudgePushToRow(reel, b, mRow, expandRow, mult) {
     const drum = getReelDrum(reel);
     const content = getReelContent(reel);
@@ -4807,105 +4949,55 @@
     await sleep(120);
   }
 
-  /** С текущей позиции (½, ¾, 1 ряд…) — один раз на весь барабан. */
-  async function animateNudgeExpandToFull(reel, b, mRow, finalMult) {
-    const drum = getReelDrum(reel);
-    const content = getReelContent(reel);
-    if (!drum || !content) return;
-
-    const h = getSymbolHeight();
+  /** Пошаговый nudge (wind-up → 1 ряд вниз), как при попадании TARGET. */
+  async function animateNudgeStepPushes(reel, b, mRow, finalMult, opts = {}) {
     const rows = getReelRows(reel);
-    const prev = b[reel].map((s) => s);
-    const landInfo = getXNudgeLandInfo(prev);
-    const fromV = getXNudgeVisibleCount(prev) || landInfo?.visible || 0;
-    const fromTopPx = landInfo?.dropped ? landInfo.anchorRow * h : 0;
-    const toV = Math.min(rows, getXNudgeStackSize(reel));
+    let visible = getXNudgeVisibleCount(b[reel]);
+    const landInfo = getXNudgeLandInfo(b[reel]);
 
-    const windUpPx = Math.min(
-      Math.round(h * NUDGE_PUSH_WINDUP_FRAC),
-      NUDGE_PUSH_WINDUP_MAX_PX
-    );
-    const host = getNudgeStackHost(reel);
-
-    renderReelContent(reel, prev, mRow, 0);
-    forceReflowStrip(drum);
-
-    let layer = host.querySelector(':scope > .xnudge-stack:not(.xnudge-strip-stack)');
-    if (!layer) {
-      layer = createXNudgeStackElement();
-      host.insertBefore(layer, content);
+    if (opts.collapseDropped && landInfo?.dropped && landInfo.anchorRow >= 0) {
+      for (let row = 0; row <= landInfo.anchorRow; row++) b[reel][row] = 'xNudge';
+      visible = landInfo.anchorRow + 1;
+      renderReelStrip(reel, b[reel], mRow);
     }
-    layer.classList.add('xnudge-stack--pushing');
-    applyXNudgeStackFullFile(layer, fromV, fromTopPx, reel);
 
-    setStripCompositing(drum, true);
-    drum.classList.add('nudge-drum-pushing');
-    reelTransformY(drum, 0);
+    reelNudgeMult[reel] = 1;
+    updateReelNudgeMultDisplay(reel, 1);
 
-    await new Promise((resolve) => {
-      const start = performance.now();
-      const tick = (now) => {
-        const t = Math.min((now - start) / NUDGE_PUSH_WINDUP_MS, 1);
-        reelTransformY(drum, Math.round(windUpPx * easeOutCubic(t)));
-        if (t < 1) requestAnimationFrame(tick);
-        else resolve();
-      };
-      requestAnimationFrame(tick);
-    });
+    await sleep(350);
+    playSlotSound(SOUND_NUDGE);
 
-    playSlotSound(SOUND_NUDGE_BAM);
+    let reelMult = 1;
+    const nudgesNeeded = Math.max(0, finalMult - 1);
+    visible = Math.max(visible, getXNudgeVisibleCount(b[reel]));
 
-    await new Promise((resolve) => {
-      const start = performance.now();
-      const tick = (now) => {
-        const t = Math.min((now - start) / NUDGE_EXPAND_MS, 1);
-        const eased = easeOutCubic(t);
-        const vis = fromV + (toV - fromV) * eased;
-        const topPx = fromTopPx + (0 - fromTopPx) * eased;
-        // Только стопка растёт; drum не давит вниз — иначе +1 лишняя ячейка.
-        const drumOffset = Math.round(windUpPx * (1 - eased));
-
-        applyXNudgeStackFullFile(layer, vis, topPx, reel);
-        reelTransformY(drum, drumOffset);
-
-        if (t >= 1) {
-          reelTransformY(drum, 0);
-          setStripCompositing(drum, false);
-          drum.classList.remove('nudge-drum-pushing');
-          layer.classList.remove('xnudge-stack--pushing');
-          resolve();
-          return;
-        }
-
-        requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-    });
-
-    bumpReelNudgeMultDisplay(reel);
-    updateReelNudgeMultDisplay(reel, finalMult);
-    await sleep(160);
+    for (let n = 0; n < nudgesNeeded; n++) {
+      reelMult += 1;
+      reelNudgeMult[reel] = reelMult;
+      const expandRow = Math.min(visible, rows - 1);
+      await animateNudgePushToRow(reel, b, mRow, expandRow, reelMult);
+      visible = Math.min(rows, getXNudgeVisibleCount(b[reel]));
+      await sleep(160);
+    }
   }
 
   async function animateXNudge(b, m, stacks) {
     for (const { reel, visible: initialVisible } of stacks) {
-      const rows = getReelRows(reel);
-      const maxVisible = Math.min(getXNudgeStackSize(reel), rows);
-      const finalMult = Math.max(1, maxVisible);
+      const maxVisible = Math.min(getXNudgeStackSize(reel), getReelRows(reel));
 
       reelNudgeMult[reel] = 1;
       updateReelNudgeMultDisplay(reel, 1);
 
       if (initialVisible >= maxVisible) {
+        reelNudgeMult[reel] = maxVisible;
+        updateReelNudgeMultDisplay(reel, maxVisible);
         await swapNudgeReelToWild(reel, b, m[reel]);
         continue;
       }
 
       renderReelStrip(reel, b[reel], m[reel]);
-      await sleep(400);
-
-      reelNudgeMult[reel] = finalMult;
-      await animateNudgeExpandToFull(reel, b, m[reel], finalMult);
+      const finalMult = maxVisible - initialVisible + 1;
+      await animateNudgeStepPushes(reel, b, m[reel], finalMult);
 
       await swapNudgeReelToWild(reel, b, m[reel]);
     }
@@ -4983,13 +5075,18 @@
       reelTransformY(reelContent, startOffset);
       setStripCompositing(reelContent, true);
 
-      const delay = reelIndex * REEL_START_STAGGER_MS;
+      const delay = reelIndex * getReelStartStaggerMs();
       const tDecelStart = Math.max(0, Number(tDecelStartMs) || 0);
-      const decelMs = REEL_DECEL_MS;
+      const decelMs = getReelDecelMs();
       const tDecelEnd = tDecelStart + teaseMs + decelMs;
 
       const controller = {
+        reelIndex,
         started: false,
+        finished: false,
+        fast: false,
+        fastStart: 0,
+        offAtFastStart: 0,
         startPerf: 0,
         startOffset,
         scrollV,
@@ -5004,10 +5101,16 @@
         landingPrepared: false,
         releaseDecelStart: 0,
         releaseStartOff: 0,
-        currentOffset: startOffset
+        currentOffset: startOffset,
+        startAnimation: null,
+        readOffset: null
       };
+      activeReelControllers[reelIndex] = controller;
 
       const finishReel = () => {
+        if (controller.finished) return;
+        controller.finished = true;
+        activeReelControllers[reelIndex] = null;
         playSlotSound(SOUND_STOP);
         board[reelIndex] = finalSymbols.map((s) => s);
         mults[reelIndex] = Array.from({ length: numVisible }, () => 1);
@@ -5055,6 +5158,127 @@
         );
       };
 
+      controller.readOffset = (elapsed) => {
+        const el = Math.max(0, Number(elapsed) || 0);
+        if (isTailHeld) {
+          if (!tailHold.released) {
+            if (el < controller.tDecelStart) {
+              return computeReelSpinOffsetPx(
+                controller.startOffset,
+                controller.scrollV,
+                controller.tDecelStart,
+                controller.decelMs,
+                el
+              );
+            }
+            return offsetForInfiniteSpin(el);
+          }
+
+          if (!controller.landingPrepared) {
+            return offsetForInfiniteSpin(el);
+          }
+
+          const decelElapsed = Math.max(0, performance.now() - controller.releaseDecelStart);
+          const u = Math.min(decelElapsed / controller.decelMs, 1);
+          return controller.releaseStartOff * (1 - easeOutReelStop(u));
+        }
+
+        return offsetForHeadSpin(el);
+      };
+
+      const tickTailHeld = (now, elapsed) => {
+        if (!tailHold.released) {
+          if (controller.fast) {
+            if (now < controller.fastStart) {
+              controller.currentOffset = controller.readOffset(elapsed);
+              reelTransformY(reelContent, controller.currentOffset);
+              return false;
+            }
+            if (!controller.landingPrepared) {
+              controller.landingPrepared = true;
+              controller.releaseStartOff = prepareTailLandingStrip();
+              controller.releaseDecelStart = now;
+              reelTransformY(reelContent, controller.releaseStartOff);
+              setStripCompositing(reelContent, true);
+            }
+          } else if (elapsed < controller.tDecelStart) {
+            controller.currentOffset = computeReelSpinOffsetPx(
+              controller.startOffset,
+              controller.scrollV,
+              controller.tDecelStart,
+              controller.decelMs,
+              elapsed
+            );
+            reelTransformY(reelContent, controller.currentOffset);
+            return false;
+          } else {
+            controller.infiniteSpin = true;
+            controller.currentOffset = offsetForInfiniteSpin(elapsed);
+            reelTransformY(reelContent, controller.currentOffset);
+            return false;
+          }
+        }
+
+        if (!tailHold.releasedAt) tailHold.releasedAt = now;
+        const tailReleaseIndex = BONUS_TAIL_REELS.indexOf(reelIndex);
+        const releaseDelay = Math.max(0, tailReleaseIndex) * TAIL_RELEASE_STAGGER_MS;
+        if (!controller.fast && now < tailHold.releasedAt + releaseDelay) {
+          controller.currentOffset = offsetForInfiniteSpin(elapsed);
+          reelTransformY(reelContent, controller.currentOffset);
+          return false;
+        }
+
+        if (!controller.landingPrepared) {
+          controller.landingPrepared = true;
+          controller.releaseStartOff = prepareTailLandingStrip();
+          controller.releaseDecelStart = controller.fast
+            ? Math.max(now, controller.fastStart)
+            : now;
+          reelTransformY(reelContent, controller.releaseStartOff);
+          setStripCompositing(reelContent, true);
+        }
+
+        if (controller.fast && now < controller.fastStart) {
+          controller.currentOffset = offsetForInfiniteSpin(elapsed);
+          reelTransformY(reelContent, controller.currentOffset);
+          return false;
+        }
+
+        const decelElapsed = now - controller.releaseDecelStart;
+        const u = Math.min(decelElapsed / controller.decelMs, 1);
+        controller.currentOffset = controller.releaseStartOff * (1 - easeOutReelStop(u));
+        reelTransformY(reelContent, controller.currentOffset);
+        if (u >= 1) {
+          finishReel();
+          return true;
+        }
+        return false;
+      };
+
+      const tickHeadSpin = (now, elapsed) => {
+        if (controller.fast) {
+          if (now < controller.fastStart) {
+            controller.currentOffset = offsetForHeadSpin(elapsed);
+          } else {
+            const f = Math.min((now - controller.fastStart) / controller.decelMs, 1);
+            controller.currentOffset = controller.offAtFastStart * (1 - easeOutReelStop(f));
+            if (f >= 1) {
+              finishReel();
+              return true;
+            }
+          }
+        } else {
+          controller.currentOffset = offsetForHeadSpin(elapsed);
+          if (elapsed >= controller.tDecelEnd) {
+            finishReel();
+            return true;
+          }
+        }
+
+        reelTransformY(reelContent, controller.currentOffset);
+        return false;
+      };
+
       const startAnimation = () => {
         if (controller.started) return;
         controller.started = true;
@@ -5063,67 +5287,13 @@
         scheduleSpinAnimator({
           tick(now) {
             const elapsed = now - controller.startPerf;
-
-            if (isTailHeld) {
-              if (!tailHold.released) {
-                if (elapsed < controller.tDecelStart) {
-                  controller.currentOffset = computeReelSpinOffsetPx(
-                      controller.startOffset,
-                      controller.scrollV,
-                      controller.tDecelStart,
-                      controller.decelMs,
-                      elapsed
-                  );
-                  reelTransformY(reelContent, controller.currentOffset);
-                } else {
-                  controller.infiniteSpin = true;
-                  controller.currentOffset = offsetForInfiniteSpin(elapsed);
-                  reelTransformY(reelContent, controller.currentOffset);
-                }
-                return false;
-              }
-
-              if (!tailHold.releasedAt) tailHold.releasedAt = now;
-              const tailReleaseIndex = BONUS_TAIL_REELS.indexOf(reelIndex);
-              const releaseDelay =
-                Math.max(0, tailReleaseIndex) * TAIL_RELEASE_STAGGER_MS;
-              if (now < tailHold.releasedAt + releaseDelay) {
-                controller.currentOffset = offsetForInfiniteSpin(elapsed);
-                reelTransformY(reelContent, controller.currentOffset);
-                return false;
-              }
-
-              if (!controller.landingPrepared) {
-                controller.landingPrepared = true;
-                controller.releaseStartOff = prepareTailLandingStrip();
-                controller.releaseDecelStart = now;
-                reelTransformY(reelContent, controller.releaseStartOff);
-                setStripCompositing(reelContent, true);
-              }
-
-              const decelElapsed = now - controller.releaseDecelStart;
-              const u = Math.min(decelElapsed / REEL_DECEL_MS, 1);
-              reelTransformY(
-                reelContent,
-                controller.releaseStartOff * (1 - easeOutReelStop(u))
-              );
-              if (u >= 1) {
-                finishReel();
-                return true;
-              }
-              return false;
-            }
-
-            reelTransformY(reelContent, offsetForHeadSpin(elapsed));
-
-            if (elapsed >= controller.tDecelEnd) {
-              finishReel();
-              return true;
-            }
-            return false;
+            if (isTailHeld) return tickTailHeld(now, elapsed);
+            return tickHeadSpin(now, elapsed);
           }
         });
       };
+
+      controller.startAnimation = startAnimation;
 
       controller.startTimeoutId = setTimeout(() => {
         controller.startTimeoutId = null;
@@ -5133,6 +5303,10 @@
   }
 
   async function spinReels(finalBoard, spinOpts = {}) {
+    activeReelControllers = new Array(NUM_REELS).fill(null);
+    beginReelSpinSkip();
+
+    try {
     const symbolHeight = getSymbolHeight();
     const extraByReel = Array(NUM_REELS).fill(0);
     const extraStopMsByReel = spinOpts.extraStopMsByReel || {};
@@ -5141,8 +5315,10 @@
 
     const baseSpinSymbols = calcSpinStripSymbols(SPIN_DURATION);
     const s0 = (getReelRows(0) + baseSpinSymbols) * symbolHeight;
-    const scrollV = (REEL_SPIN_LINEAR_FRAC * s0) / REEL_SPIN_BASE_LINEAR_MS;
-    const decelDistance = Math.max(0, s0 - scrollV * REEL_SPIN_BASE_LINEAR_MS);
+    const spinBaseLinearMs = getReelSpinBaseLinearMs();
+    const reelDecelMs = getReelDecelMs();
+    const scrollV = (REEL_SPIN_LINEAR_FRAC * s0) / spinBaseLinearMs;
+    const decelDistance = Math.max(0, s0 - scrollV * spinBaseLinearMs);
 
     const tDecelStartByReel = [];
     const totalSpinSymbolsByReel = [];
@@ -5150,7 +5326,7 @@
     let headMaxStopMs = 0;
 
     for (let i = 0; i < NUM_REELS; i++) {
-      const delay = i * REEL_START_STAGGER_MS;
+      const delay = i * getReelStartStaggerMs();
       const teaseMs = Math.max(0, Number(extraStopMsByReel[i]) || 0);
       const waysInterGap = Math.max(0, Number(waysInterReelGapMs[i]) || 0);
       const scatterGap = Math.max(0, Number(scatterInterReelGapMs[i]) || 0);
@@ -5158,16 +5334,16 @@
       let minStopAbs;
       if (i === 0) {
         minStopAbs =
-          delay + REEL_SPIN_BASE_LINEAR_MS + extraByReel[i] + REEL_DECEL_MS;
+          delay + spinBaseLinearMs + extraByReel[i] + reelDecelMs;
       } else {
-        const stopStaggerMs = scatterGap > 0 ? 0 : REEL_STOP_STAGGER_MS;
+        const stopStaggerMs = scatterGap > 0 ? 0 : getReelStopStaggerMs();
         minStopAbs = prevStopAbs + stopStaggerMs + waysInterGap + scatterGap;
       }
 
       const numVisible = getReelRows(i);
       let localTDecel = Math.max(
         0,
-        minStopAbs - delay - teaseMs - REEL_DECEL_MS
+        minStopAbs - delay - teaseMs - reelDecelMs
       );
 
       let requiredOffset = scrollV * (localTDecel + teaseMs) + decelDistance;
@@ -5188,9 +5364,9 @@
       localTDecel = Math.max(localTDecel, stripBasedTDecel);
 
       if (teaseMs > 0 && i === BONUS_EXPAND_REEL) {
-        const reel2Delay = REEL_START_STAGGER_MS;
+        const reel2Delay = getReelStartStaggerMs();
         const reel2StopAbs =
-          reel2Delay + tDecelStartByReel[1] + REEL_DECEL_MS;
+          reel2Delay + tDecelStartByReel[1] + reelDecelMs;
         localTDecel = Math.max(localTDecel, reel2StopAbs - delay);
       }
 
@@ -5205,7 +5381,7 @@
 
       tDecelStartByReel[i] = localTDecel;
       totalSpinSymbolsByReel[i] = stripLen;
-      prevStopAbs = delay + localTDecel + teaseMs + REEL_DECEL_MS;
+      prevStopAbs = delay + localTDecel + teaseMs + reelDecelMs;
 
       if (i <= BONUS_EXPAND_REEL) {
         headMaxStopMs = Math.max(headMaxStopMs, prevStopAbs);
@@ -5214,10 +5390,10 @@
 
     if (spinOpts.tailHold && headMaxStopMs > 0) {
       for (const i of BONUS_TAIL_REELS) {
-        const delay = i * REEL_START_STAGGER_MS;
+        const delay = i * getReelStartStaggerMs();
         const minTailTDecel = Math.max(
           0,
-          headMaxStopMs - delay - REEL_DECEL_MS
+          headMaxStopMs - delay - reelDecelMs
         );
         if (tDecelStartByReel[i] < minTailTDecel) {
           tDecelStartByReel[i] = minTailTDecel;
@@ -5267,6 +5443,10 @@
 
     await Promise.all(reelPromises);
     return { tailPromises: null };
+    } finally {
+      clearReelSpinSkip();
+      activeReelControllers = [];
+    }
   }
 
   async function doBonus4Spin() {
@@ -5280,6 +5460,7 @@
     const jackpotBuild = fromBook && maxWinBook && spinIndex >= 0 && spinIndex < 4;
     const jackpotFinal = fromBook && maxWinBook && spinIndex === 6;
     const runLiveMechanics = !fromBook || jackpotBuild || jackpotFinal;
+    const bookTorpedoDrops = fromBook ? bookPreset.torpedoDrops || [] : [];
 
     let b;
     let m;
@@ -5295,6 +5476,10 @@
       raw = bookSetup.raw;
       bookTargetNudge = bookSetup.bookTargetNudge;
       needsBookNudge = bookSetup.needsBookNudge;
+      if (bookTorpedoDrops.length) {
+        applyBookTorpedoLandingBoard(b, m, bookTorpedoDrops);
+        raw = b.map((col) => [...col]);
+      }
     } else {
       reelNudgeMult = [1, 1, 1, 1, 1, 1];
       resetAllReelNudgeDisplays();
@@ -5331,16 +5516,22 @@
       if (shouldNudgeAnim) {
         if (fromBook) restoreBookBoardForNudgeAnim(b, m, bookTargetNudge);
         await runBookNudgeAnimation(b, m, bookTargetNudge);
-      } else if (runLiveMechanics) {
-        const xwInfo = resolveXWays(b, m);
-        if (xwInfo.positions.length) await animateXWays(b, m, xwInfo);
+      } else if (runLiveMechanics || bookTorpedoDrops.length) {
+        if (runLiveMechanics) {
+          const xwInfo = resolveXWays(b, m);
+          if (xwInfo.positions.length) await animateXWays(b, m, xwInfo);
 
-        const nudgeStacks = detectXNudgeStacks(b);
-        if (nudgeStacks.length) await animateXNudge(b, m, nudgeStacks);
+          const nudgeStacks = detectXNudgeStacks(b);
+          if (nudgeStacks.length) await animateXNudge(b, m, nudgeStacks);
+        }
 
-        torpedoCompleted = await processBonus4TorpedoDrops(b, m);
-        if (torpedoCompleted) {
-          await animateTorpedoCompleteOnLane();
+        if (fromBook && bookTorpedoDrops.length) {
+          torpedoCompleted = await replayBookTorpedoDrops(b, m, bookTorpedoDrops, bookPreset);
+        } else if (runLiveMechanics) {
+          torpedoCompleted = await processBonus4TorpedoDrops(b, m);
+          if (torpedoCompleted) {
+            await animateTorpedoCompleteOnLane();
+          }
         }
       }
     } finally {
@@ -5753,6 +5944,27 @@
         setScatterMod(4);
       });
     }
+
+    initTurboReelsToggle();
+
+    const reelsFrame = document.querySelector('.reels-frame');
+    if (reelsFrame) {
+      reelsFrame.addEventListener('pointerdown', (e) => {
+        if (!isSpinning || !spinSkipReady) return;
+        if (e.target.closest('.leaderboard-btn, .turbo-reels-btn, button')) return;
+        ensureBgMusicStarted();
+        requestSpinFastForward();
+      });
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code !== 'Space') return;
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+      if (!isSpinning || !spinSkipReady) return;
+      e.preventDefault();
+      requestSpinFastForward();
+    });
 
     const modBigWinTest = document.getElementById('modBigWinTest');
     if (modBigWinTest) {
