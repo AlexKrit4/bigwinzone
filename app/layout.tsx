@@ -3,8 +3,8 @@ import "./globals.css";
 import { Header } from "@/components/Header";
 
 export const metadata: Metadata = {
-  title: "Rave Casino",
-  description: "Neon casino platform for Rave Slot",
+  title: "BigWinZone — BWZ Casino",
+  description: "Онлайн-казино BigWinZone: слоты, бонусы и крупные выигрыши",
 };
 
 export default function RootLayout({

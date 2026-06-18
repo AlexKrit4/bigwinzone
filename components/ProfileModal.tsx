@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AuthUser } from "@/components/AuthModal";
 import type { BalanceParts } from "@/components/BalanceBreakdown";
+import { WinTitleBar } from "@/components/WinTitleBar";
 
 type DepositRow = {
   id: string;
@@ -97,20 +98,22 @@ export function ProfileModal({ user, onClose, onBalancesUpdate }: ProfileModalPr
 
   return (
     <div className="auth-backdrop" role="dialog" aria-modal="true">
-      <div className="auth-modal profile-modal">
-        <button className="modal-x" onClick={onClose} aria-label="Закрыть">
-          x
-        </button>
-        <p className="eyebrow">Профиль</p>
-        <h2>{user.username}</h2>
-        <p className="wallet-balance-line">
-          Всего: <strong>{user.balance.toFixed(2)} ₽</strong>
-        </p>
-        <ul className="balance-breakdown-inline">
-          <li>Реальные: {(user.cash ?? user.balance).toFixed(2)} ₽</li>
-          <li>Бонус: {(user.bonus ?? 0).toFixed(2)} ₽</li>
-          <li>Под промо: {(user.promoDeposit ?? 0).toFixed(2)} ₽</li>
-        </ul>
+      <div className="auth-modal profile-modal win-window">
+        <WinTitleBar title="Профиль.exe" />
+        <div className="win-body">
+          <button className="modal-x win-chrome-btn win-chrome-btn--close" onClick={onClose} aria-label="Закрыть">
+            ×
+          </button>
+          <p className="eyebrow">Игрок BWZ</p>
+          <h2>{user.username}</h2>
+          <p className="wallet-balance-line">
+            На счёте: <strong>{user.balance.toFixed(2)} ₽</strong>
+          </p>
+          <ul className="balance-breakdown-inline">
+            <li>Основной: {(user.cash ?? user.balance).toFixed(2)} ₽</li>
+            <li>Бонусы: {(user.bonus ?? 0).toFixed(2)} ₽</li>
+            <li>К депозиту: {(user.promoDeposit ?? 0).toFixed(2)} ₽</li>
+          </ul>
 
         <div className="wallet-tabs">
           <button
@@ -249,6 +252,7 @@ export function ProfileModal({ user, onClose, onBalancesUpdate }: ProfileModalPr
             )}
           </>
         )}
+        </div>
       </div>
     </div>
   );
