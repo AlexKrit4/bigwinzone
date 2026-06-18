@@ -5,7 +5,7 @@ type GameCardProps = {
   href: string;
   title: string;
   description: string;
-  avatarSrc?: string;
+  coverSrc: string;
   windowTitle?: string;
 };
 
@@ -13,7 +13,7 @@ export function GameCard({
   href,
   title,
   description,
-  avatarSrc = "/slot/images/high1.svg",
+  coverSrc,
   windowTitle,
 }: GameCardProps) {
   return (
@@ -21,7 +21,7 @@ export function GameCard({
       <WinTitleBar title={windowTitle ?? `${title}.exe`} />
       <div className="win-body game-card-body">
         <div className="game-card-art">
-          <img src={avatarSrc} alt="" className="game-card-avatar" />
+          <img src={coverSrc} alt="" className="game-card-cover" />
         </div>
         <div className="game-card-copy">
           <h3>{title}</h3>
