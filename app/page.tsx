@@ -38,14 +38,14 @@ export default function HomePage() {
               href="/play/rave"
               title="Rave Slot"
               windowTitle="RaveSlot.exe"
-              coverSrc="/covers/rave-slot.png"
+              coverSrc="/slot/images/high1.png"
               description="Неоновый рейв: xWays расширяют барабаны, split wilds делят символы, бонусные раунды и Big Win-шоу на весь экран."
             />
             <GameCard
               href="/play/xboot"
               title="Red Devil"
               windowTitle="RedDevil.exe"
-              coverSrc="/covers/red-devil.jpg"
+              coverSrc="/slot/games/xboot/images/high1.png"
               description="Подводная охота: xNudge-толчки, xWays, бонусы на 3 и 4 скаттера, торpeda-сборка и шанс на MAX WIN."
             />
           </div>
