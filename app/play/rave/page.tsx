@@ -133,7 +133,7 @@ export default function RavePlayPage() {
               ← Назад
             </Link>
             <div className="play-toolbar-meta">
-              <p className="eyebrow">Now Playing</p>
+              <p className="eyebrow">BigWinZone</p>
               <h1>Rave Slot</h1>
             </div>
             <div className="play-toolbar-actions">

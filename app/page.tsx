@@ -1,52 +1,60 @@
 import Link from "next/link";
 import { GameCard } from "@/components/GameCard";
+import { WinTitleBar } from "@/components/WinTitleBar";
 
 export default function HomePage() {
   return (
-    <main>
-      <section className="hero-section">
-        <div className="hero-glow hero-glow-one" />
-        <div className="hero-glow hero-glow-two" />
-        <div className="hero-content">
-          <p className="eyebrow">Rave Casino</p>
-          <h1>Казино в неоне, где твой баланс живет в аккаунте</h1>
+    <main className="desktop-main">
+      <section className="hero-section win-window">
+        <WinTitleBar title="Добро пожаловать в BigWinZone.exe" />
+        <div className="win-body hero-content">
+          <p className="eyebrow">BIGWINZONE · BWZ Casino</p>
+          <h1>Ваше любимое казино с душой Windows&nbsp;95</h1>
           <p className="hero-copy">
-            Авторизуйся, пополни тестовый баланс и запускай Rave Slot прямо на
-            сайте. Игра остается статикой, а деньги хранятся на сервере.
+            Регистрируйтесь, пополняйте счёт и крутите слоты прямо в браузере.
+            Бонусы, фриспины, wild-символы и крупные выигрыши — всё как в
+            настоящем зале, только уютнее и без очереди у автомата.
           </p>
           <div className="hero-actions">
             <Link href="/play/rave" className="primary-btn">
-              Играть в Rave
+              Играть сейчас
             </Link>
             <a href="#games" className="secondary-btn">
-              Смотреть игры
+              Каталог игр
             </a>
           </div>
         </div>
       </section>
 
-      <section className="games-section" id="games">
-        <div className="section-heading">
-          <p className="eyebrow">Games</p>
-          <h2>Доступные игры</h2>
-        </div>
-        <div className="games-grid">
-          <GameCard
-            href="/play/rave"
-            title="Rave Slot"
-            description="xWays, бонусные окошки, split wilds и рейвовая Big Win презентация."
-          />
-          <GameCard
-            href="/play/xboot"
-            title="Red Devil"
-            description="Das xBoot-style: барабаны 2-3-4-4-3-2, xWays и xNudge, подводная тема."
-          />
+      <section className="games-section win-window" id="games">
+        <WinTitleBar title="Каталог игр — Program Manager" />
+        <div className="win-body">
+          <div className="section-heading">
+            <p className="eyebrow">Слоты BWZ</p>
+            <h2>Выберите игру</h2>
+          </div>
+          <div className="games-grid">
+            <GameCard
+              href="/play/rave"
+              title="Rave Slot"
+              windowTitle="RaveSlot.exe"
+              description="Неоновый рейв: xWays расширяют барабаны, split wilds делят символы, бонусные раунды и Big Win-шоу на весь экран."
+              avatarSrc="/slot/images/high1.svg"
+            />
+            <GameCard
+              href="/play/xboot"
+              title="Red Devil"
+              windowTitle="RedDevil.exe"
+              description="Подводная охота: xNudge-толчки, xWays, бонусы на 3 и 4 скаттера, торpeda-сборка и шанс на MAX WIN."
+              avatarSrc="/slot/images/high1.svg"
+            />
+          </div>
         </div>
       </section>
 
       <footer className="site-footer">
-        <span>Rave Casino MVP</span>
-        <span>Играйте ответственно. Это тестовая платформа.</span>
+        <span>BigWinZone (BWZ) · © 1995–2026</span>
+        <span>Играйте ответственно. Только 18+.</span>
       </footer>
     </main>
   );
