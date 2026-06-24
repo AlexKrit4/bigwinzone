@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#061820">
+  <title>New Slot — 1024 Ways</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header play-hide">
+      <h1 class="header-title">NEW SLOT</h1>
+      <p class="header-sub">4 · 4 · 4 · 4 · 4 — 1024 ways</p>
+    </header>
+
+    <div class="game-wrap">
+      <div class="slot-bg" aria-hidden="true"></div>
+
+      <div class="reels-frame">
+        <div class="win-overlay" id="winOverlay" style="display: none;">
+          <div class="win-overlay-amount" id="winOverlayAmount">0.00</div>
+          <div class="win-overlay-lines" id="winOverlayLines">Ways: 0</div>
+        </div>
+        <div class="reels-stack">
+          <div class="reels-grid" id="reelsGrid"></div>
+        </div>
+      </div>
+
+      <p class="win-line" id="winLine"></p>
+
+      <div class="controls">
+        <button type="button" class="bet-btn" id="betDown" aria-label="Уменьшить ставку">−</button>
+        <div class="spin-column">
+          <button type="button" class="spin-btn" id="spinBtn">SPIN</button>
+        </div>
+        <button type="button" class="bet-btn" id="betUp" aria-label="Увеличить ставку">+</button>
+      </div>
+
+      <div class="hud">
+        <div class="hud-block">
+          <span>Баланс</span>
+          <strong id="balanceDisplay">0.00</strong>
+        </div>
+        <div class="hud-block hud-center">
+          <span>Ставка</span>
+          <strong id="betDisplay">1.00</strong>
+        </div>
+        <div class="hud-block" style="text-align: right">
+          <span>Выигрыш</span>
+          <strong id="winDisplay">0.00</strong>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    if (new URLSearchParams(location.search).get("embed") === "1" || window.self !== window.top) {
+      document.body.classList.add("embedded-slot");
+    }
+    window.SLOT_GAME_ID = "newslot";
+    window.SLOT_GAME_TITLE = "New Slot";
+  </script>
+  <script src="../shared/casino-wallet.js"></script>
+  <script src="slot.js"></script>
+</body>
+</html>

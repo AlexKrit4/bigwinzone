@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export default function RavePlayPage() {
+export default function NewSlotPlayPage() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const [mobile, setMobile] = useState(false);
@@ -49,19 +49,6 @@ export default function RavePlayPage() {
     setImmersive((v) => !v);
   }, []);
 
-  const notifySlotLayout = useCallback(() => {
-    iframeRef.current?.contentWindow?.postMessage(
-      { type: "RAVE_SLOT_LAYOUT" },
-      window.location.origin,
-    );
-  }, []);
-
-  useEffect(() => {
-    if (!immersive) return;
-    const t = window.setTimeout(() => notifySlotLayout(), 80);
-    return () => window.clearTimeout(t);
-  }, [immersive, notifySlotLayout]);
-
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
@@ -73,15 +60,11 @@ export default function RavePlayPage() {
           }),
         );
       }
-
-      if (event.data?.type === "RAVE_SLOT_REQUEST_FULLSCREEN") {
-        void enterFullscreen();
-      }
     };
 
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [enterFullscreen]);
+  }, []);
 
   useEffect(() => {
     const onFsChange = () => {
@@ -107,7 +90,6 @@ export default function RavePlayPage() {
       } else {
         iframe.style.height = "";
       }
-      notifySlotLayout();
     };
     syncFrame();
     const ro = shellRef.current ? new ResizeObserver(syncFrame) : null;
@@ -119,7 +101,7 @@ export default function RavePlayPage() {
       window.visualViewport?.removeEventListener("resize", syncFrame);
       window.removeEventListener("resize", syncFrame);
     };
-  }, [mobile, immersive, notifySlotLayout]);
+  }, [mobile, immersive]);
 
   return (
     <main className={`play-page${mobile ? " play-page--mobile" : ""}`}>
@@ -133,8 +115,8 @@ export default function RavePlayPage() {
               ← Назад
             </Link>
             <div className="play-toolbar-meta">
-              <p className="eyebrow">BigWinZone</p>
-              <h1>Rave Slot</h1>
+              <p className="eyebrow">Now Playing</p>
+              <h1>New Slot</h1>
             </div>
             <div className="play-toolbar-actions">
               <button
@@ -149,11 +131,10 @@ export default function RavePlayPage() {
         )}
         <iframe
           ref={iframeRef}
-          src="/slot/index.html?embed=1"
+          src="/slot/games/newslot/index.html?embed=1"
           className="slot-frame"
-          title="Rave Slot"
+          title="New Slot"
           allow="autoplay; fullscreen"
-          onLoad={notifySlotLayout}
         />
       </div>
     </main>

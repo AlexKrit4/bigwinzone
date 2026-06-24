@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { WinTitleBar } from "@/components/WinTitleBar";
 
 export type AuthUser = {
   id: string;
@@ -61,13 +62,15 @@ export function AuthModal({ mode, onClose, onAuthed }: AuthModalProps) {
 
   return (
     <div className="auth-backdrop" role="dialog" aria-modal="true">
-      <div className="auth-modal">
-        <button className="modal-x" onClick={onClose} aria-label="Закрыть">
-          x
-        </button>
-        <p className="eyebrow">{isRegister ? "Create account" : "Welcome back"}</p>
-        <h2>{isRegister ? "Регистрация" : "Вход"}</h2>
-        <form onSubmit={onSubmit} className="auth-form">
+      <div className="auth-modal win-window">
+        <WinTitleBar title={isRegister ? "Регистрация.exe" : "Вход.exe"} />
+        <div className="win-body">
+          <button className="modal-x win-chrome-btn win-chrome-btn--close" onClick={onClose} aria-label="Закрыть">
+            ×
+          </button>
+          <p className="eyebrow">{isRegister ? "Новый игрок BWZ" : "С возвращением в BWZ"}</p>
+          <h2>{isRegister ? "Регистрация" : "Вход"}</h2>
+          <form onSubmit={onSubmit} className="auth-form">
           <label>
             Email
             <input
@@ -102,7 +105,8 @@ export function AuthModal({ mode, onClose, onAuthed }: AuthModalProps) {
           <button className="primary-btn" disabled={loading}>
             {loading ? "Подождите..." : isRegister ? "Создать аккаунт" : "Войти"}
           </button>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   );

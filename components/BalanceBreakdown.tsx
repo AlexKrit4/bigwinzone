@@ -39,23 +39,23 @@ export function BalanceBreakdown({ parts, onRefresh }: BalanceBreakdownProps) {
           onRefresh?.();
         }}
         aria-expanded={open}
-        title="Состав баланса"
+        title="Ваш счёт"
       >
-        <strong>{parts.balance.toFixed(2)}</strong>
+        <strong>{parts.balance.toFixed(2)} ₽</strong>
         <span className="balance-breakdown-caret">{open ? "▲" : "▼"}</span>
       </button>
       {open && (
         <ul className="balance-breakdown-menu">
           <li>
-            <span>Реальные деньги</span>
+            <span>Основной счёт</span>
             <strong>{parts.cash.toFixed(2)} ₽</strong>
           </li>
           <li>
-            <span>Бонусный счёт</span>
+            <span>Бонусные средства</span>
             <strong>{parts.bonus.toFixed(2)} ₽</strong>
           </li>
           <li>
-            <span>Депозит под промокод</span>
+            <span>Бонус к депозиту</span>
             <strong>{parts.promoDeposit.toFixed(2)} ₽</strong>
           </li>
         </ul>
