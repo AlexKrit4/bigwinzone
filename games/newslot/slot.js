@@ -72,7 +72,6 @@
   /** @type {Map<string, HTMLElement>} id → symbol wrapper */
   let symbolNodes = new Map();
   let symStepPx = 80;
-  let nextSymbolId = 1;
 
   function createEmptyBoard() {
     return Array.from({ length: NUM_REELS }, () => Array.from({ length: ROWS }, () => null));
@@ -306,17 +305,34 @@
     }
   }
 
-  async function animateInitialDrop(bookBoard) {
-    clearAllSymbols();
+  async function animateClearBoard() {
+    const tasks = [];
+    for (let reel = 0; reel < NUM_REELS; reel += 1) {
+      for (let row = ROWS - 1; row >= 0; row -= 1) {
+        const node = symbolNodes.get(symbolId(reel, row));
+        if (node) {
+          tasks.push((async () => {
+            await sleep(reel * COL_STAGGER_MS + (ROWS - 1 - row) * DROP_STAGGER_MS);
+            setNodeTransform(node, ROWS * symStepPx, true);
+            await waitTransition(node);
+            node.remove();
+          })());
+        }
+      }
+    }
+    await Promise.all(tasks);
+    symbolNodes.clear();
     board = createEmptyBoard();
+  }
 
+  async function animateInitialDrop(bookBoard) {
     const tasks = [];
 
     for (let reel = 0; reel < NUM_REELS; reel += 1) {
       for (let row = 0; row < ROWS; row += 1) {
         const sym = bookBoard[reel][row];
         board[reel][row] = sym;
-        const spawnOffset = -(ROWS - row + 1) * symStepPx;
+        const spawnOffset = -ROWS * symStepPx;
         mountSymbol(reel, row, sym, spawnOffset);
       }
     }
@@ -324,13 +340,13 @@
     await sleep(COL_STAGGER_MS * 0.5);
 
     for (let reel = 0; reel < NUM_REELS; reel += 1) {
-      for (let row = 0; row < ROWS; row += 1) {
+      for (let row = ROWS - 1; row >= 0; row -= 1) {
         const node = symbolNodes.get(symbolId(reel, row));
         tasks.push(
           (async () => {
-        await sleep(reel * COL_STAGGER_MS + row * DROP_STAGGER_MS);
-        setNodeTransform(node, 0, true);
-        await waitTransition(node);
+            await sleep(reel * COL_STAGGER_MS + (ROWS - 1 - row) * DROP_STAGGER_MS);
+            setNodeTransform(node, 0, true);
+            await waitTransition(node);
             node?.classList.remove("is-dropping");
           })(),
         );
@@ -378,7 +394,7 @@
       node.dataset.id = symbolId(reel, toRow);
       cellEls[reel][toRow].appendChild(node);
 
-      const delta = (toRow - fromRow) * symStepPx;
+      const delta = (fromRow - toRow) * symStepPx;
       setNodeTransform(node, delta, false);
       await sleep(16);
       setNodeTransform(node, 0, true);
@@ -415,15 +431,6 @@
     await Promise.all(tasks);
   }
 
-  function countEmptyTopSlots(reel) {
-    let count = 0;
-    for (let row = 0; row < ROWS; row += 1) {
-      if (board[reel][row] == null) count += 1;
-      else break;
-    }
-    return count;
-  }
-
   async function refillColumn(reel, refillFn) {
     const emptyRows = [];
     for (let row = 0; row < ROWS; row += 1) {
@@ -434,9 +441,11 @@
     const tasks = emptyRows.map(async (row, index) => {
       const sym = refillFn();
       board[reel][row] = sym;
-      const spawnOffset = -(emptyRows.length - index) * symStepPx;
+      const spawnOffset = -emptyRows.length * symStepPx;
       const node = mountSymbol(reel, row, sym, spawnOffset);
-      await sleep(index * DROP_STAGGER_MS);
+      
+      const reverseIndex = emptyRows.length - 1 - index;
+      await sleep(reverseIndex * DROP_STAGGER_MS);
       setNodeTransform(node, 0, true);
       await waitTransition(node);
       node.classList.remove("is-dropping");
@@ -546,6 +555,7 @@
 
     const book = pickBook();
     els.winLine.textContent = "Падают символы…";
+    await animateClearBoard();
     await animateInitialDrop(book.initial);
 
     const { totalWin, totalWays, cascade } = await runCascadeLoop(bet, book.refill);

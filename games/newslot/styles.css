@@ -38,7 +38,7 @@ body.embedded-slot .play-hide {
   width: var(--sym-h);
   height: calc(var(--sym-h) * 4);
   flex-shrink: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .cascade-col::before {
