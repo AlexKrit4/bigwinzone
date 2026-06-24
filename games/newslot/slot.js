@@ -1,5 +1,5 @@
 /**
- * New Slot — xBoot-style UI, 4×4 grid, 1024-ways paytable (bet 1.00).
+ * New Slot — xBoot-style UI, 5×4 grid (1024 ways), paytable at bet 1.00.
  * Wallet: shared CasinoWallet → /api/balance + /api/spin
  */
 (function initNewSlot() {
