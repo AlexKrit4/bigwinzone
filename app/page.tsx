@@ -41,6 +41,11 @@ export default function HomePage() {
             title="Red Devil"
             description="Das xBoot-style: барабаны 2-3-4-4-3-2, xWays и xNudge, подводная тема."
           />
+          <GameCard
+            href="/play/newslot"
+            title="New Slot"
+            description="Новый слот в разработке. Серверный баланс уже подключён — правила игры скоро."
+          />
         </div>
       </section>
 
