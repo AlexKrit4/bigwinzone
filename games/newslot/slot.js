@@ -341,7 +341,8 @@
         const sym = bookBoard[reel][row];
         board[reel][row] = sym;
         const spawnOffset = -ROWS * symStepPx;
-        mountSymbol(reel, row, sym, spawnOffset);
+        const node = mountSymbol(reel, row, sym, spawnOffset);
+        node.offsetHeight; // Force reflow
       }
     }
 
@@ -419,6 +420,7 @@
     const tasks = moves.map(async ({ fromRow, toRow, node }) => {
       const delta = (fromRow - toRow) * symStepPx;
       setNodeTransform(node, delta, false);
+      node.offsetHeight; // Force reflow
       await sleep(16);
       setNodeTransform(node, 0, true);
       await waitTransition(node);
@@ -466,9 +468,10 @@
       board[reel][row] = sym;
       const spawnOffset = -ROWS * symStepPx; // Start from above the board
       const node = mountSymbol(reel, row, sym, spawnOffset);
+      node.offsetHeight; // Force reflow
       
       const reverseIndex = emptyRows.length - 1 - index;
-      await sleep(reverseIndex * DROP_STAGGER_MS);
+      await sleep(reverseIndex * DROP_STAGGER_MS + 16);
       setNodeTransform(node, 0, true);
       await waitTransition(node);
       node.classList.remove("is-dropping");
