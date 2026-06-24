@@ -48,6 +48,13 @@ export default function HomePage() {
               coverSrc="/slot/games/xboot/images/high1.png"
               description="Подводная охота: xNudge-толчки, xWays, бонусы на 3 и 4 скаттера, торpeda-сборка и шанс на MAX WIN."
             />
+            <GameCard
+              href="/play/newslot"
+              title="New Slot"
+              windowTitle="NewSlot.exe"
+              coverSrc="/slot/images/high1.png"
+              description="Новый слот в разработке. Серверный баланс уже подключён — правила игры скоро."
+            />
           </div>
         </div>
       </section>
