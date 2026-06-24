@@ -243,6 +243,11 @@
 
   function mountSymbol(reel, row, sym, yOffsetPx) {
     const id = symbolId(reel, row);
+    
+    // Safety cleanup if a node somehow got stuck here
+    const existing = symbolNodes.get(id);
+    if (existing) existing.remove();
+
     const node = createSymbolEl(sym);
     node.dataset.id = id;
     node.style.transform = `translateY(${yOffsetPx}px)`;
@@ -321,6 +326,9 @@
       }
     }
     await Promise.all(tasks);
+    
+    // Ensure absolutely everything is cleaned up from DOM and Map
+    symbolNodes.forEach((node) => node.remove());
     symbolNodes.clear();
     board = createEmptyBoard();
   }
@@ -384,16 +392,31 @@
     applyGravityColumn(reel);
 
     const emptyTop = ROWS - moving.length;
-    const tasks = moving.map(async (item, index) => {
+    const moves = [];
+
+    // Calculate moves
+    moving.forEach((item, index) => {
       const toRow = emptyTop + index;
-      const { fromRow, node } = item;
-      if (!node || fromRow === toRow) return;
+      if (item.fromRow !== toRow && item.node) {
+        moves.push({ ...item, toRow });
+      }
+    });
 
+    // Delete old keys first to avoid overwriting conflicts
+    for (const { fromRow } of moves) {
       symbolNodes.delete(symbolId(reel, fromRow));
-      symbolNodes.set(symbolId(reel, toRow), node);
-      node.dataset.id = symbolId(reel, toRow);
-      cellEls[reel][toRow].appendChild(node);
+    }
 
+    // Set new keys and move DOM nodes
+    for (const { toRow, node } of moves) {
+      const newId = symbolId(reel, toRow);
+      symbolNodes.set(newId, node);
+      node.dataset.id = newId;
+      cellEls[reel][toRow].appendChild(node);
+    }
+
+    // Animate
+    const tasks = moves.map(async ({ fromRow, toRow, node }) => {
       const delta = (fromRow - toRow) * symStepPx;
       setNodeTransform(node, delta, false);
       await sleep(16);
@@ -441,7 +464,7 @@
     const tasks = emptyRows.map(async (row, index) => {
       const sym = refillFn();
       board[reel][row] = sym;
-      const spawnOffset = -emptyRows.length * symStepPx;
+      const spawnOffset = -ROWS * symStepPx; // Start from above the board
       const node = mountSymbol(reel, row, sym, spawnOffset);
       
       const reverseIndex = emptyRows.length - 1 - index;
