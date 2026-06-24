@@ -4,6 +4,8 @@ import { roundMoney } from "@/lib/balances";
 export const BIG_WIN_PRESENTATION_MULT = 15;
 export const XBOOT_GAME_ID = "xboot";
 export const XBOOT_GAME_TITLE = "Red Devil";
+export const NEWSLOT_GAME_ID = "newslot";
+export const NEWSLOT_GAME_TITLE = "New Slot";
 
 export type BigWinEntry = {
   id: string;

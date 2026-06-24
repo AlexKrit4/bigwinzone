@@ -127,13 +127,14 @@ export function Header() {
 
   return (
     <>
-      <header className="site-header">
-        <Link href="/" className="brand">
-          <span className="brand-mark">R</span>
-          <span>Rave Casino</span>
+      <header className="site-header taskbar">
+        <Link href="/" className="brand start-btn">
+          <span className="brand-mark" aria-hidden="true" />
+          <span>Пуск · BWZ</span>
         </Link>
         <nav className="site-nav">
           <Link href="/play/rave">Rave Slot</Link>
+          <Link href="/play/xboot">Red Devil</Link>
         </nav>
         <div className="header-actions">
           {user ? (
@@ -160,7 +161,7 @@ export function Header() {
                   setWalletOpen(true);
                 }}
               >
-                Депозит
+                Касса
               </button>
               <button
                 type="button"

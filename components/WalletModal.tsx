@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import type { AuthUser } from "@/components/AuthModal";
 import type { BalanceParts } from "@/components/BalanceBreakdown";
+import { WinTitleBar } from "@/components/WinTitleBar";
 
 type WalletTab = "deposit" | "withdraw" | "promo";
 
@@ -161,20 +162,17 @@ export function WalletModal({
 
   return (
     <div className="auth-backdrop" role="dialog" aria-modal="true">
-      <div className="auth-modal wallet-modal">
-        <button className="modal-x" onClick={onClose} aria-label="Закрыть">
-          x
-        </button>
-        <p className="eyebrow">Кошелёк</p>
-        <h2>{user.username}</h2>
-        <p className="wallet-balance-line">
-          Всего: <strong>{user.balance.toFixed(2)} ₽</strong>
-          <span className="wallet-hint">
-            {" "}
-            (реал. {(user.cash ?? user.balance).toFixed(2)} / бонус{" "}
-            {(user.bonus ?? 0).toFixed(2)} / промо {(user.promoDeposit ?? 0).toFixed(2)})
-          </span>
-        </p>
+      <div className="auth-modal wallet-modal win-window">
+        <WinTitleBar title="Касса.exe" />
+        <div className="win-body">
+          <button className="modal-x win-chrome-btn win-chrome-btn--close" onClick={onClose} aria-label="Закрыть">
+            ×
+          </button>
+          <p className="eyebrow">Кошелёк BWZ</p>
+          <h2>{user.username}</h2>
+          <p className="wallet-balance-line">
+            На счёте: <strong>{user.balance.toFixed(2)} ₽</strong>
+          </p>
 
         <div className="wallet-tabs">
           <button
@@ -314,6 +312,7 @@ export function WalletModal({
             </button>
           </form>
         )}
+        </div>
       </div>
     </div>
   );

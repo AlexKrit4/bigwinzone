@@ -105,6 +105,16 @@ body.embedded-slot .play-hide {
   z-index: 2;
 }
 
+.reels-frame.spin-skip-ready {
+  cursor: pointer;
+}
+
+.reels-frame.spin-skip-ready .reels-stack,
+.reels-frame.spin-skip-ready .reels-grid,
+.reels-frame.spin-skip-ready .reel-viewport {
+  cursor: pointer;
+}
+
 /* Прелюдия 3-го скаттера — красное свечение на весь слот, плавное появление/затухание */
 .game-wrap.scatter-prelude-active::before {
   content: '';
@@ -231,7 +241,7 @@ body.embedded-slot .play-hide {
   content: '';
   position: absolute;
   inset: 4px;
-  border-radius: 8px;
+  border-radius: 0;
   border: 2px solid rgba(245, 200, 66, 0.9);
   box-shadow:
     0 0 14px rgba(245, 200, 66, 0.45),
@@ -251,7 +261,7 @@ body.embedded-slot .play-hide {
   content: '';
   position: absolute;
   inset: 3px;
-  border-radius: 8px;
+  border-radius: 0;
   border: 2px solid rgba(255, 248, 210, 0.95);
   box-shadow:
     0 0 18px rgba(255, 255, 220, 0.75),
@@ -304,6 +314,11 @@ body.embedded-slot .play-hide {
 
 .game-wrap.bonus4-active .reels-stack {
   --bonus4-torpedo-gap: clamp(6px, 1vmin, 10px);
+}
+
+/* 2-3-4-4-3-2: короткие барабаны прижаты к низу, как 3-й и 4-й */
+.game-wrap.bonus4-active .reel-col {
+  justify-content: flex-end;
 }
 
 .reels-grid {
@@ -368,13 +383,13 @@ body.embedded-slot .play-hide {
   width: 100%;
   z-index: 2;
   pointer-events: none;
-  border-radius: 8px;
+  border-radius: 0;
   overflow: visible;
   background-color: transparent;
 }
 
 .reel-content .xnudge-strip-stack {
-  border-radius: 8px;
+  border-radius: 0;
   z-index: 2;
 }
 
@@ -388,7 +403,7 @@ body.embedded-slot .play-hide {
 .symbol.xnudge-spin-cluster {
   flex-shrink: 0;
   width: 100%;
-  border-radius: 8px;
+  border-radius: 0;
   box-shadow: 0 0 10px rgba(255, 171, 64, 0.35);
   background-color: rgba(8, 32, 44, 0.45);
 }
@@ -422,7 +437,7 @@ body.embedded-slot .play-hide {
   position: relative;
   isolation: isolate;
   background: linear-gradient(180deg, rgba(12, 50, 68, 0.5), rgba(4, 18, 28, 0.85));
-  border-radius: 6px;
+  border-radius: 0;
   box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.45);
 }
 
@@ -447,7 +462,7 @@ html.slot-spin-active .reel-viewport {
   width: 100%;
   height: var(--sym-h);
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: 0;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -528,7 +543,7 @@ html.slot-spin-active .reel-viewport {
 .torpedo-cell {
   width: var(--sym-h);
   height: var(--sym-h);
-  border-radius: 8px;
+  border-radius: 0;
   border: 2px solid rgba(245, 200, 66, 0.35);
   background: rgba(4, 22, 32, 0.72);
   box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.45);
@@ -575,7 +590,7 @@ html.slot-spin-active .reel-viewport {
 }
 
 .xnudge-stack.bigwin-prelude-highlight::after {
-  border-radius: 8px;
+  border-radius: 0;
 }
 
 .torpedo-fly {
@@ -807,7 +822,7 @@ html.slot-spin-active .reel-viewport {
   content: '';
   position: absolute;
   inset: 3px;
-  border-radius: 8px;
+  border-radius: 0;
   border: 2px solid rgba(143, 212, 255, 0.95);
   box-shadow:
     0 0 12px rgba(143, 212, 255, 0.55),
@@ -1382,6 +1397,7 @@ html.slot-spin-active .reel-viewport {
 }
 
 body.replay-mode .leaderboard-btn,
+body.replay-mode .turbo-reels-btn,
 body.replay-mode .controls,
 body.replay-mode .mod-btn,
 body.replay-mode .bet-btn,
@@ -1458,6 +1474,43 @@ body.replay-mode .hud {
 }
 
 /* ── Leaderboard button ── */
+.turbo-reels-btn {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 12;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(245, 200, 66, 0.35);
+  border-radius: 10px;
+  background: rgba(8, 40, 58, 0.82);
+  color: rgba(232, 244, 255, 0.72);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.turbo-reels-btn:hover {
+  color: var(--gold);
+  border-color: rgba(245, 200, 66, 0.55);
+  background: rgba(14, 58, 82, 0.95);
+}
+
+.turbo-reels-btn.active {
+  color: var(--gold);
+  border-color: var(--gold);
+  background: rgba(245, 200, 66, 0.14);
+  box-shadow: 0 0 16px var(--gold-glow);
+}
+
+.turbo-reels-icon {
+  width: 22px;
+  height: 22px;
+}
+
 .leaderboard-btn {
   position: absolute;
   top: 6px;

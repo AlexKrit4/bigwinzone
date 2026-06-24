@@ -145,8 +145,8 @@ function XbootPlayContent() {
               ← Назад
             </Link>
             <div className="play-toolbar-meta">
-              <p className="eyebrow">{isReplay ? "Replay" : "Now Playing"}</p>
-              <h1>Red Devil (xBoot)</h1>
+              <p className="eyebrow">{isReplay ? "Повтор · BWZ" : "BigWinZone"}</p>
+              <h1>Red Devil</h1>
             </div>
             <div className="play-toolbar-actions">
               <button
