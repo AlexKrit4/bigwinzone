@@ -375,7 +375,9 @@
 
   function setNodeTransform(node, yPx, animate) {
     if (!node) return;
-    node.classList.toggle("is-dropping", animate);
+    node.style.transition = animate 
+      ? "transform 0.42s cubic-bezier(0.34, 1.05, 0.48, 1), opacity 0.24s ease"
+      : "none";
     node.style.transform = `translateY(${yPx}px)`;
   }
 
@@ -448,7 +450,9 @@
       if (!node) return;
       node.querySelector(".symbol")?.classList.add("win-highlight");
       await sleep(WIN_HIGHLIGHT_MS);
-      node.classList.add("is-removing");
+      node.style.transition = "opacity 0.26s ease, transform 0.26s ease";
+      node.style.opacity = "0";
+      node.style.transform = "scale(0.82)";
       await waitTransition(node);
       node.remove();
       symbolNodes.delete(symbolId(reel, row));
@@ -563,7 +567,7 @@
     spinning = true;
     setControlsEnabled(false);
     els.win.textContent = "0.00";
-    els.winLine.textContent = "";
+    els.winLine.innerHTML = "&nbsp;";
     els.winOverlay.style.display = "none";
     clearWinHighlights();
 

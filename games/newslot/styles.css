@@ -72,21 +72,14 @@ body.embedded-slot .play-hide {
   width: 100%;
   height: var(--sym-h);
   will-change: transform, opacity;
-  transition:
-    transform 0.38s cubic-bezier(0.34, 1.02, 0.48, 1),
-    opacity 0.24s ease;
 }
 
 .cascade-symbol.is-dropping {
-  transition:
-    transform 0.42s cubic-bezier(0.34, 1.05, 0.48, 1),
-    opacity 0.24s ease;
+  /* Handled via JS inline style */
 }
 
 .cascade-symbol.is-removing {
-  transition: opacity 0.26s ease, transform 0.26s ease;
-  opacity: 0;
-  transform: scale(0.82);
+  /* Handled via JS inline style */
 }
 
 .symbol .sym-label {
@@ -281,4 +274,12 @@ body.embedded-slot .play-hide {
     grid-template-columns: 44px 1fr repeat(3, 40px);
     font-size: 0.72rem;
   }
+}
+
+.win-line {
+  min-height: 1.5em !important;
+  line-height: 1.5 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
