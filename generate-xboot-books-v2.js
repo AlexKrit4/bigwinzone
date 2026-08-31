@@ -363,16 +363,20 @@ function writeMissBookAt(shardPaths, shardSize, globalId) {
 function rtpBalancePass(shardPaths, totalBooks, jackpotId, targetRtpPct, config = { seedIdPrefix: 'xb' }) {
   const { makeBookAtIndexMinWin, makeBookAtIndex } = require('./generate-xboot-books.js');
   const RTP_TOL = 0.55;
+  const poolScale = Math.max(1, totalBooks / 100_000);
   let metrics = computeMetricsFromShards(shardPaths, totalBooks, jackpotId);
 
-  for (let round = 0; round < 100; round++) {
+  for (let round = 0; round < 120; round++) {
     const gap = metrics.rtp - targetRtpPct;
     if (Math.abs(gap) <= RTP_TOL) break;
 
     if (gap < -RTP_TOL) {
       const deficit = (-gap / 100) * metrics.count;
-      const batch = Math.min(120, Math.max(15, Math.ceil(deficit / 12)));
-      const minWin = Math.min(6.5, Math.max(1.3, 2.2 + round * 0.05));
+      const batch = Math.min(
+        Math.round(120 * poolScale),
+        Math.max(Math.round(20 * poolScale), Math.ceil(deficit / Math.max(6, 10 / Math.sqrt(poolScale))))
+      );
+      const minWin = Math.min(8, Math.max(1.8, 2.4 + round * 0.04 * Math.sqrt(poolScale)));
 
       const lowHits = collectBooksByWin(shardPaths, jackpotId, batch * 2, {
         ascending: true,
@@ -382,14 +386,15 @@ function rtpBalancePass(shardPaths, totalBooks, jackpotId, targetRtpPct, config 
       let upgraded = 0;
       for (let k = 0; k < Math.min(batch, lowHits.length); k++) {
         const { id } = lowHits[k];
-        const book = makeBookAtIndexMinWin(id, config, minWin + (k % 5) * 0.08);
+        const book = makeBookAtIndexMinWin(id, config, minWin + (k % 5) * 0.1);
         if (book.hasBonus) continue;
         writeBookAt(shardPaths, { ...book, id });
         upgraded++;
       }
 
-      if (upgraded === 0) {
-        const lowBonus = collectBooksByWin(shardPaths, jackpotId, Math.min(12, batch), {
+      if (upgraded < batch * 0.25) {
+        const bonusBatch = Math.min(Math.round(12 * poolScale), batch);
+        const lowBonus = collectBooksByWin(shardPaths, jackpotId, bonusBatch, {
           ascending: true,
           predicate: (_w, _id, flags) => !!(flags & FLAG_HAS_BONUS)
         });
@@ -404,23 +409,27 @@ function rtpBalancePass(shardPaths, totalBooks, jackpotId, targetRtpPct, config 
       }
 
       if (!upgraded) break;
-      if (round % 5 === 0) {
+      if (round % 3 === 0) {
         metrics = computeMetricsFromShards(shardPaths, totalBooks, jackpotId);
-        console.log(`  RTP↑ ${round + 1}: ${metrics.rtp.toFixed(2)}% (+${upgraded})`);
+        console.log(`  RTP↑ ${round + 1}: ${metrics.rtp.toFixed(2)}% (+${upgraded}, batch≈${batch})`);
       }
     } else {
       const excess = (gap / 100) * metrics.count;
-      const batch = Math.min(120, Math.max(15, Math.ceil(excess / 12)));
+      const batch = Math.min(
+        Math.round(120 * poolScale),
+        Math.max(Math.round(20 * poolScale), Math.ceil(excess / Math.max(6, 10 / Math.sqrt(poolScale))))
+      );
       const highs = collectTopHitBooks(shardPaths, jackpotId, batch * 2, { hitsOnly: true });
       if (!highs.length) break;
 
-      for (let k = 0; k < Math.min(batch, highs.length); k++) {
+      const demoted = Math.min(batch, highs.length);
+      for (let k = 0; k < demoted; k++) {
         writeMissBookAt(shardPaths, 0, highs[k].id);
       }
 
-      if (round % 5 === 0) {
+      if (round % 3 === 0) {
         metrics = computeMetricsFromShards(shardPaths, totalBooks, jackpotId);
-        console.log(`  RTP↓ ${round + 1}: ${metrics.rtp.toFixed(2)}% (-${Math.min(batch, highs.length)})`);
+        console.log(`  RTP↓ ${round + 1}: ${metrics.rtp.toFixed(2)}% (-${demoted})`);
       }
     }
 

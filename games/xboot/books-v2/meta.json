@@ -5,9 +5,9 @@
   "shardSize": 1000000,
   "recordSize": 64,
   "targetRtpPct": 96,
-  "hitRatePct": 21.9816,
+  "hitRatePct": 20.6615,
   "bonusRatePct": 0.4444,
-  "measuredRtpPct": 62.9785,
+  "measuredRtpPct": 96.2317,
   "jackpotBookId": 5000000,
   "jackpotSeed": "xb_2z60w_baivu",
   "shards": [
