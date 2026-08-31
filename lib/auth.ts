@@ -19,12 +19,17 @@ export function signUserToken(userId: string) {
   return jwt.sign({ userId }, getJwtSecret(), { expiresIn: "7d" });
 }
 
+function cookieSecure() {
+  const site = process.env.SITE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "";
+  return site.startsWith("https://");
+}
+
 export async function setAuthCookie(token: string) {
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: cookieSecure(),
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
   });
