@@ -24,6 +24,7 @@ const FULL_BOOKS = 10_000_000;
 const TARGET_RTP_PCT = 96.0;
 const TARGET_HIT_RATE = 0.22;
 const TARGET_BONUS_RATE = 1 / 225;
+const FLAG_HAS_BONUS = 1;
 const WORKER_COUNT = Math.min(8, Math.max(1, (os.cpus()?.length || 4) - 1));
 
 const OUT_DIR = path.join(__dirname, 'games', 'xboot', 'books-v2');
@@ -161,8 +162,6 @@ function sumWinsFromShards(shardPaths, jackpotId) {
   return { sumWin, count };
 }
 
-const FLAG_HAS_BONUS = 1;
-
 function computeMetricsFromShards(shardPaths, totalBooks, jackpotId) {
   let sumWin = 0;
   let hits = 0;
@@ -204,11 +203,14 @@ function computeMetricsFromShards(shardPaths, totalBooks, jackpotId) {
 }
 
 /** Топ-N hit-книг без полного скана 66M в память (для RTP-подгонки). */
-function collectTopHitBooks(shardPaths, jackpotId, limit = 8000) {
+function collectTopHitBooks(shardPaths, jackpotId, limit = 8000, { bonusOnly = false, hitsOnly = false } = {}) {
   const cap = Math.max(1, Number(limit) || 8000);
   const top = [];
 
-  const insertHit = (id, totalWin) => {
+  const insertHit = (id, totalWin, flags) => {
+    const hasBonus = !!(flags & FLAG_HAS_BONUS);
+    if (hitsOnly && hasBonus) return;
+    if (bonusOnly && !hasBonus) return;
     if (totalWin <= 0.0001) return;
     if (top.length < cap) {
       top.push({ id, totalWin });
@@ -238,8 +240,10 @@ function collectTopHitBooks(shardPaths, jackpotId, limit = 8000) {
       for (let i = 0; i < batch; i++) {
         const globalId = startId + base + i;
         if (globalId === jackpotId) continue;
-        const totalWin = chunk.readFloatLE(i * RECORD_SIZE + 12);
-        insertHit(globalId, totalWin);
+        const row = i * RECORD_SIZE;
+        const totalWin = chunk.readFloatLE(row + 12);
+        const flags = chunk.readUInt8(row + 4);
+        insertHit(globalId, totalWin, flags);
       }
     }
     fs.closeSync(fd);
@@ -247,6 +251,82 @@ function collectTopHitBooks(shardPaths, jackpotId, limit = 8000) {
 
   top.sort((a, b) => b.totalWin - a.totalWin);
   return top;
+}
+
+function collectBooksByWin(shardPaths, jackpotId, limit, { ascending = false, predicate = () => true }) {
+  const cap = Math.max(1, Number(limit) || 8000);
+  const top = [];
+
+  const insert = (id, totalWin, flags) => {
+    if (!predicate(totalWin, id, flags)) return;
+    if (top.length < cap) {
+      top.push({ id, totalWin, flags });
+      if (top.length === cap) {
+        top.sort((a, b) => (ascending ? a.totalWin - b.totalWin : b.totalWin - a.totalWin));
+      }
+      return;
+    }
+    const edge = top[top.length - 1].totalWin;
+    if (ascending ? totalWin >= edge : totalWin <= edge) return;
+    let lo = 0;
+    let hi = top.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      const cmp = ascending ? top[mid].totalWin - totalWin : totalWin - top[mid].totalWin;
+      if (cmp < 0) lo = mid + 1;
+      else hi = mid;
+    }
+    top.splice(lo, 0, { id, totalWin, flags });
+    if (top.length > cap) top.length = cap;
+  };
+
+  for (const { shardPath, startId, count: c } of shardPaths) {
+    const fd = fs.openSync(shardPath, 'r');
+    const chunk = Buffer.alloc(RECORD_SIZE * 4096);
+    for (let base = 0; base < c; base += 4096) {
+      const batch = Math.min(4096, c - base);
+      const byteLen = batch * RECORD_SIZE;
+      const off = SHARD_HEADER_SIZE + base * RECORD_SIZE;
+      fs.readSync(fd, chunk, 0, byteLen, off);
+      for (let i = 0; i < batch; i++) {
+        const globalId = startId + base + i;
+        if (globalId === jackpotId) continue;
+        const row = i * RECORD_SIZE;
+        const totalWin = chunk.readFloatLE(row + 12);
+        const flags = chunk.readUInt8(row + 4);
+        insert(globalId, totalWin, flags);
+      }
+    }
+    fs.closeSync(fd);
+  }
+
+  top.sort((a, b) => (ascending ? a.totalWin - b.totalWin : b.totalWin - a.totalWin));
+  return top;
+}
+
+function readRecordFlags(shardPaths, globalId) {
+  const shard = shardPaths.find((s) => globalId >= s.startId && globalId < s.startId + s.count);
+  if (!shard) return { flags: 0, scatter: 0 };
+  const local = globalId - shard.startId;
+  const buf = Buffer.alloc(RECORD_SIZE);
+  const fd = fs.openSync(shard.shardPath, 'r');
+  fs.readSync(fd, buf, 0, RECORD_SIZE, SHARD_HEADER_SIZE + local * RECORD_SIZE);
+  fs.closeSync(fd);
+  return {
+    flags: buf.readUInt8(4),
+    scatter: buf.readUInt8(5)
+  };
+}
+
+function writeBookAt(shardPaths, book) {
+  const { encodeRecord } = require('./xboot-books-v2.js');
+  const globalId = Number(book.id);
+  const shard = shardPaths.find((s) => globalId >= s.startId && globalId < s.startId + s.count);
+  const local = globalId - shard.startId;
+  const fd = fs.openSync(shard.shardPath, 'r+');
+  const buf = encodeRecord({ ...book, id: globalId });
+  fs.writeSync(fd, buf, 0, RECORD_SIZE, SHARD_HEADER_SIZE + local * RECORD_SIZE);
+  fs.closeSync(fd);
 }
 
 function writeMissBookAt(shardPaths, shardSize, globalId) {
@@ -279,27 +359,85 @@ function writeMissBookAt(shardPaths, shardSize, globalId) {
   fs.closeSync(fd);
 }
 
-/** Подгонка RTP без scale-pass: крупные hit → miss (доска и totalWin совпадают). */
-function rtpTunePass(shardPaths, totalBooks, jackpotId, shardSize, targetRtpPct) {
+/** Итеративная подгонка RTP: слабые hit/bonus ↑, крупные hit (не bonus) → miss. */
+function rtpBalancePass(shardPaths, totalBooks, jackpotId, targetRtpPct, config = { seedIdPrefix: 'xb' }) {
+  const { makeBookAtIndexMinWin, makeBookAtIndex } = require('./generate-xboot-books.js');
   const RTP_TOL = 0.55;
   let metrics = computeMetricsFromShards(shardPaths, totalBooks, jackpotId);
-  let pass = 0;
 
-  while (metrics.rtp > targetRtpPct + RTP_TOL && pass < 40) {
-    const excess = ((metrics.rtp - targetRtpPct) / 100) * metrics.count;
-    const batch = Math.min(3000, Math.max(80, Math.ceil(excess / 3)));
-    const hits = collectTopHitBooks(shardPaths, jackpotId, Math.max(batch * 3, 8000));
-    if (!hits.length) break;
+  for (let round = 0; round < 100; round++) {
+    const gap = metrics.rtp - targetRtpPct;
+    if (Math.abs(gap) <= RTP_TOL) break;
 
-    console.log(`  RTP-коррекция ${pass + 1}: ${metrics.rtp.toFixed(2)}% → demote ${batch} hit`);
-    for (let k = 0; k < batch && k < hits.length; k++) {
-      writeMissBookAt(shardPaths, shardSize, hits[k].id);
+    if (gap < -RTP_TOL) {
+      const deficit = (-gap / 100) * metrics.count;
+      const batch = Math.min(120, Math.max(15, Math.ceil(deficit / 12)));
+      const minWin = Math.min(6.5, Math.max(1.3, 2.2 + round * 0.05));
+
+      const lowHits = collectBooksByWin(shardPaths, jackpotId, batch * 2, {
+        ascending: true,
+        predicate: (w, _id, flags) => w > 0.0001 && !(flags & FLAG_HAS_BONUS)
+      });
+
+      let upgraded = 0;
+      for (let k = 0; k < Math.min(batch, lowHits.length); k++) {
+        const { id } = lowHits[k];
+        const book = makeBookAtIndexMinWin(id, config, minWin + (k % 5) * 0.08);
+        if (book.hasBonus) continue;
+        writeBookAt(shardPaths, { ...book, id });
+        upgraded++;
+      }
+
+      if (upgraded === 0) {
+        const lowBonus = collectBooksByWin(shardPaths, jackpotId, Math.min(12, batch), {
+          ascending: true,
+          predicate: (_w, _id, flags) => !!(flags & FLAG_HAS_BONUS)
+        });
+        for (let k = 0; k < lowBonus.length; k++) {
+          const { id } = lowBonus[k];
+          const { scatter } = readRecordFlags(shardPaths, id);
+          const sc = scatter >= 4 ? 4 : 3;
+          const book = makeBookAtIndex(id, config, { forceBonus: sc, attempt: round * 100 + k });
+          writeBookAt(shardPaths, { ...book, id });
+          upgraded++;
+        }
+      }
+
+      if (!upgraded) break;
+      if (round % 5 === 0) {
+        metrics = computeMetricsFromShards(shardPaths, totalBooks, jackpotId);
+        console.log(`  RTP↑ ${round + 1}: ${metrics.rtp.toFixed(2)}% (+${upgraded})`);
+      }
+    } else {
+      const excess = (gap / 100) * metrics.count;
+      const batch = Math.min(120, Math.max(15, Math.ceil(excess / 12)));
+      const highs = collectTopHitBooks(shardPaths, jackpotId, batch * 2, { hitsOnly: true });
+      if (!highs.length) break;
+
+      for (let k = 0; k < Math.min(batch, highs.length); k++) {
+        writeMissBookAt(shardPaths, 0, highs[k].id);
+      }
+
+      if (round % 5 === 0) {
+        metrics = computeMetricsFromShards(shardPaths, totalBooks, jackpotId);
+        console.log(`  RTP↓ ${round + 1}: ${metrics.rtp.toFixed(2)}% (-${Math.min(batch, highs.length)})`);
+      }
     }
+
     metrics = computeMetricsFromShards(shardPaths, totalBooks, jackpotId);
-    pass++;
   }
 
   return metrics;
+}
+
+/** @deprecated use rtpBalancePass */
+function rtpBoostPass(shardPaths, totalBooks, jackpotId, targetRtpPct, config) {
+  return rtpBalancePass(shardPaths, totalBooks, jackpotId, targetRtpPct, config);
+}
+
+/** @deprecated use rtpBalancePass */
+function rtpTunePass(shardPaths, totalBooks, jackpotId, _shardSize, targetRtpPct) {
+  return computeMetricsFromShards(shardPaths, totalBooks, jackpotId);
 }
 
 async function main() {
@@ -333,8 +471,8 @@ async function main() {
   let metrics = computeMetricsFromShards(shardPaths, books, jackpotId);
   console.log(`   RTP ${metrics.rtp.toFixed(4)}% | hit ${(metrics.hitRate * 100).toFixed(2)}% | bonus ${(metrics.bonusRate * 100).toFixed(3)}%`);
 
-  console.log('\n4) RTP-подгонка (без scale-pass, hit→miss)…');
-  metrics = rtpTunePass(shardPaths, books, jackpotId, shardSize, TARGET_RTP_PCT);
+  console.log('\n4) RTP-подгонка (итеративная)…');
+  metrics = rtpBalancePass(shardPaths, books, jackpotId, TARGET_RTP_PCT, { seedIdPrefix: 'xb' });
   console.log(`   RTP ${metrics.rtp.toFixed(4)}% | hit ${(metrics.hitRate * 100).toFixed(2)}% | bonus ${(metrics.bonusRate * 100).toFixed(3)}%`);
 
   const jpShard = shardPaths.find((s) => jackpotId >= s.startId && jackpotId < s.startId + s.count);
