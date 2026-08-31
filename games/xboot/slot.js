@@ -3153,6 +3153,26 @@
     return isJackpotBookEntry(activeBookSession.entry);
   }
 
+  /** Индекс текущего бонус-спина в книге (0..6). */
+  function getBookBonusSpinIndex() {
+    return Math.max(0, Number(bonusPlaybackSpinIdx) - 1);
+  }
+
+  /** Максвин-книга: финальный 7-й спин бонуса. */
+  function isJackpotFinalBonusSpin() {
+    return isMaxWinBookSession() && getBookBonusSpinIndex() >= 6;
+  }
+
+  /** В джекпот-книге выплата задана в rec.win (не ways на доске). */
+  function resolveBookSpinWin(bookPreset, calculatedWin) {
+    if (!bookPreset || !isMaxWinBookSession()) return calculatedWin;
+    const presetWin = Number(bookPreset.win);
+    if (Number.isFinite(presetWin) && presetWin >= 0) {
+      return presetWin * bet;
+    }
+    return calculatedWin;
+  }
+
   function isJackpotBookSession() {
     return isMaxWinBookSession();
   }
@@ -3168,7 +3188,15 @@
   }
 
   async function settleBookWin(amount) {
-    const pay = capBookPayout(amount);
+    let pay = Math.max(0, Number(amount) || 0);
+    if (isMaxWinBookSession()) {
+      if (isJackpotFinalBonusSpin()) {
+        const target = Math.max(0, Number(activeBookSession?.targetTotal) || getMaxWinCapAmount());
+        pay = Math.max(0, target - getBookSessionPaid());
+      }
+    } else {
+      pay = capBookPayout(pay);
+    }
     if (replayMode) {
       if (activeBookSession) {
         activeBookSession.sessionPaid = getBookSessionPaid() + pay;
@@ -3195,7 +3223,9 @@
   }
 
   function shouldTriggerMaxWinScene(spinWin, bonusWinBeforeSpin, opts = {}) {
-    if (opts.jackpotFinal && isMaxWinBookSession()) return true;
+    if (isMaxWinBookSession()) {
+      return isJackpotFinalBonusSpin() || !!opts.jackpotFinal;
+    }
     if (!activeBookSession) return false;
     const cap = getMaxWinCapAmount();
     const spin = Math.max(0, Number(spinWin) || 0);
@@ -3203,12 +3233,6 @@
     const bonusBefore = Math.max(0, Number(bonusWinBeforeSpin) || 0);
     const sessionAfter = base + bonusBefore + spin;
     if (sessionAfter >= cap - 0.001 || spin >= cap - 0.001) return true;
-    if (
-      isMaxWinBookSession()
-      && Number(activeBookSession.entry?.totalWin) >= MAX_WIN_CAP_MULT
-    ) {
-      return sessionAfter >= (activeBookSession.targetTotal || cap) - 0.001;
-    }
     return false;
   }
 
@@ -5545,16 +5569,18 @@
 
     renderBoard(b, m);
 
-    const winInfo = calculateWaysWin(bet, b, m);
+    let winInfo = calculateWaysWin(bet, b, m);
+    const spinWin = resolveBookSpinWin(bookPreset, winInfo.totalWin);
+    winInfo = { ...winInfo, totalWin: spinWin };
     const bonusBefore = bonusTotalWin;
-    const triggerMaxWin = shouldTriggerMaxWinScene(winInfo.totalWin, bonusBefore, {
+    const triggerMaxWin = shouldTriggerMaxWinScene(spinWin, bonusBefore, {
       jackpotFinal
     });
-    let paid = winInfo.totalWin;
+    let paid = spinWin;
     if (activeBookSession) {
-      paid = await settleBookWin(winInfo.totalWin);
+      paid = await settleBookWin(spinWin);
     } else {
-      await settle(0, winInfo.totalWin, { ...getWinSettleMeta(), skipBigWinRecord: true });
+      await settle(0, spinWin, { ...getWinSettleMeta(), skipBigWinRecord: true });
     }
     if (activeBookSession) {
       bonusTotalWin = getBookSessionPaid();
@@ -5563,10 +5589,6 @@
     }
 
     if (triggerMaxWin) {
-      const remainder = await settleMaxWinCapRemainder();
-      if (remainder > 0) {
-        bonusTotalWin = getBookSessionPaid();
-      }
       updateHud(bonusTotalWin.toFixed(2));
       updateBonusHud();
       await playMaxWinPrelude(winInfo.highlights);
@@ -5721,16 +5743,34 @@
 
     renderBoard(b, m);
 
-    const winInfo = calculateWaysWin(bet, b, m);
-    bonusTotalWin += winInfo.totalWin;
+    let winInfo = calculateWaysWin(bet, b, m);
+    const spinWin = resolveBookSpinWin(bookPreset, winInfo.totalWin);
+    winInfo = { ...winInfo, totalWin: spinWin };
+    const bonusBefore = bonusTotalWin;
+    const triggerMaxWin = shouldTriggerMaxWinScene(spinWin, bonusBefore, {});
 
-    await settle(0, winInfo.totalWin, getWinSettleMeta());
+    let paid = spinWin;
+    if (activeBookSession) {
+      paid = await settleBookWin(spinWin);
+      bonusTotalWin = getBookSessionPaid();
+    } else {
+      bonusTotalWin += spinWin;
+      await settle(0, spinWin, { ...getWinSettleMeta(), skipBigWinRecord: true });
+    }
 
-    updateHud(winInfo.totalWin.toFixed(2));
+    if (triggerMaxWin) {
+      updateHud(bonusTotalWin.toFixed(2));
+      updateBonusHud();
+      await playMaxWinPrelude(winInfo.highlights);
+      await runMaxWinScene();
+      return 'maxwin';
+    }
+
+    updateHud(paid.toFixed(2));
     updateBonusHud();
 
-    if (winInfo.totalWin > 0) {
-      await showWinPresentation(winInfo);
+    if (paid > 0) {
+      await showWinPresentation({ ...winInfo, totalWin: paid });
     }
   }
 
