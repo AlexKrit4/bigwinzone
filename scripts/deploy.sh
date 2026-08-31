@@ -30,9 +30,10 @@ export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=2048}"
 npm run build
 
 echo "==> pm2 restart"
-if pm2 describe books-server >/dev/null 2>&1; then
+if pm2 describe xboot-books-server >/dev/null 2>&1; then
   pm2 restart ecosystem.config.cjs
 else
+  pm2 delete books-server 2>/dev/null || true
   pm2 start ecosystem.config.cjs
 fi
 pm2 save

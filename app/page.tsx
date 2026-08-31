@@ -8,15 +8,15 @@ export default function HomePage() {
         <div className="hero-glow hero-glow-one" />
         <div className="hero-glow hero-glow-two" />
         <div className="hero-content">
-          <p className="eyebrow">Rave Casino</p>
-          <h1>Казино в неоне, где твой баланс живет в аккаунте</h1>
+          <p className="eyebrow">Das xBoot Casino</p>
+          <h1>Казино с Das xBoot — баланс в аккаунте</h1>
           <p className="hero-copy">
-            Авторизуйся, пополни тестовый баланс и запускай Rave Slot прямо на
-            сайте. Игра остается статикой, а деньги хранятся на сервере.
+            Авторизуйся, пополни баланс и запускай Das xBoot (Red Devil) прямо на
+            сайте. xWays, xNudge и бонусные раунды.
           </p>
           <div className="hero-actions">
-            <Link href="/play/rave" className="primary-btn">
-              Играть в Rave
+            <Link href="/play/xboot" className="primary-btn">
+              Играть в Das xBoot
             </Link>
             <a href="#games" className="secondary-btn">
               Смотреть игры
@@ -32,20 +32,15 @@ export default function HomePage() {
         </div>
         <div className="games-grid">
           <GameCard
-            href="/play/rave"
-            title="Rave Slot"
-            description="xWays, бонусные окошки, split wilds и рейвовая Big Win презентация."
-          />
-          <GameCard
             href="/play/xboot"
-            title="Red Devil"
-            description="Das xBoot-style: барабаны 2-3-4-4-3-2, xWays и xNudge, подводная тема."
+            title="Das xBoot"
+            description="Red Devil: барабаны 2-3-4-4-3-2, xWays и xNudge, подводная тема."
           />
         </div>
       </section>
 
       <footer className="site-footer">
-        <span>Rave Casino MVP</span>
+        <span>Das xBoot Casino</span>
         <span>Играйте ответственно. Это тестовая платформа.</span>
       </footer>
     </main>

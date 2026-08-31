@@ -1,10 +1,13 @@
 module.exports = {
   apps: [
     {
-      name: "books-server",
-      script: "books-server.js",
+      name: "xboot-books-server",
+      script: "xboot-books-server.js",
       cwd: __dirname,
-      env: { NODE_ENV: "production" },
+      env: {
+        NODE_ENV: "production",
+        XBOOT_BOOKS_PORT: 3848,
+      },
     },
     {
       name: "rave-casino",

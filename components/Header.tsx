@@ -129,11 +129,11 @@ export function Header() {
     <>
       <header className="site-header">
         <Link href="/" className="brand">
-          <span className="brand-mark">R</span>
-          <span>Rave Casino</span>
+          <span className="brand-mark">D</span>
+          <span>Das xBoot</span>
         </Link>
         <nav className="site-nav">
-          <Link href="/play/rave">Rave Slot</Link>
+          <Link href="/play/xboot">Das xBoot</Link>
         </nav>
         <div className="header-actions">
           {user ? (
