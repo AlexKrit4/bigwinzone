@@ -2,7 +2,7 @@
 
 /**
  * Генератор BOOKS_XBOOT_V2: бинарные шарды, корзины RTP, один scale-pass.
- * Пилот: 1M книг (~64 MB data). Полный: --full → 66M.
+ * Пилот: 100k книг. Полный: --full → 10M.
  */
 
 const fs = require('fs');
@@ -19,11 +19,11 @@ const {
   readMeta
 } = require('./xboot-books-v2.js');
 
-const PILOT_BOOKS = 1_000_000;
-const FULL_BOOKS = 66_000_000;
-const TARGET_RTP_PCT = 96.03;
-const TARGET_HIT_RATE = 0.2217;
-const TARGET_BONUS_RATE = 1 / 211;
+const PILOT_BOOKS = 100_000;
+const FULL_BOOKS = 10_000_000;
+const TARGET_RTP_PCT = 96.0;
+const TARGET_HIT_RATE = 0.22;
+const TARGET_BONUS_RATE = 1 / 225;
 const WORKER_COUNT = Math.min(8, Math.max(1, (os.cpus()?.length || 4) - 1));
 
 const OUT_DIR = path.join(__dirname, 'games', 'xboot', 'books-v2');
@@ -32,7 +32,7 @@ const WORKER_SCRIPT = path.join(__dirname, 'generate-xboot-books-v2-worker.js');
 function parseArgs() {
   const full = process.argv.includes('--full');
   const books = full ? FULL_BOOKS : PILOT_BOOKS;
-  const jackpotId = full ? 33_000_000 : 888_888;
+  const jackpotId = full ? 5_000_000 : 50_000;
   return { full, books, jackpotId, shardSize: DEFAULT_SHARD_SIZE };
 }
 
@@ -307,7 +307,7 @@ async function main() {
   const t0 = Date.now();
 
   console.log('='.repeat(60));
-  console.log(`BOOKS_XBOOT_V2 — ${full ? 'FULL 66M' : 'PILOT 1M'}`);
+  console.log(`BOOKS_XBOOT_V2 — ${full ? 'FULL 10M' : 'PILOT 100k'}`);
   console.log(`Книг: ${books}, шард: ${shardSize}, воркеров: ${WORKER_COUNT}`);
   console.log(`Выход: ${OUT_DIR}`);
   console.log('='.repeat(60));

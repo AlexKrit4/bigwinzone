@@ -57,6 +57,27 @@ export async function recordBigWinIfEligible(
       ? opts.scatterBuy
       : inferScatterBuyFromSeed(opts.bookSeed);
 
+  const seed = opts.bookSeed?.trim() || null;
+  if (seed) {
+    const existing = await dbClient.bigWin.findFirst({
+      where: { userId, bookSeed: seed },
+      orderBy: { multiplier: "desc" },
+    });
+    if (existing && existing.multiplier >= multiplier) return existing;
+    if (existing) {
+      return dbClient.bigWin.update({
+        where: { id: existing.id },
+        data: {
+          win,
+          multiplier,
+          bet: effectiveBet,
+          scatterBuy,
+          gameTitle: opts.gameTitle || XBOOT_GAME_TITLE,
+        },
+      });
+    }
+  }
+
   return dbClient.bigWin.create({
     data: {
       userId,

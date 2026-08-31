@@ -556,7 +556,7 @@
     return {
       game: 'xboot',
       gameTitle: 'Red Devil',
-      effectiveBet: bet,
+      effectiveBet: getFinalBet(),
       bookSeed: seed,
       bookIndex:
         entry?.bookId ??
@@ -4785,7 +4785,11 @@
 
     const payload = {
       ...getWinSettleMeta(),
-      ...meta
+      ...meta,
+      skipBigWinRecord:
+        meta.skipBigWinRecord ||
+        (!!activeBookSession && !meta.recordBigWinOnly) ||
+        (bonusMode && !meta.recordBigWinOnly)
     };
 
     const result = await CASINO_API.settleSpin(bet, win, payload);
@@ -5550,7 +5554,7 @@
     if (activeBookSession) {
       paid = await settleBookWin(winInfo.totalWin);
     } else {
-      await settle(0, winInfo.totalWin, getWinSettleMeta());
+      await settle(0, winInfo.totalWin, { ...getWinSettleMeta(), skipBigWinRecord: true });
     }
     if (activeBookSession) {
       bonusTotalWin = getBookSessionPaid();
@@ -5839,7 +5843,7 @@
       if (activeBookSession) {
         basePaid = await settleBookWin(winInfo.totalWin);
       } else {
-        await settle(0, winInfo.totalWin, getWinSettleMeta());
+        await settle(0, winInfo.totalWin, { ...getWinSettleMeta(), skipBigWinRecord: true });
       }
       winInfo = { ...winInfo, totalWin: basePaid };
 

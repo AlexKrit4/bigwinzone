@@ -23,15 +23,16 @@ const {
 } = require('./xboot-slot-sim.js');
 
 const TOTAL_BOOKS = 100000;
-const DEFAULT_TARGET_RTP_PCT = 96.03;
+const DEFAULT_TARGET_RTP_PCT = 96.0;
 const DEFAULT_TARGET_HIT_RATE = 0.2217;
 const DEFAULT_TARGET_BONUS_RATE = 1 / 211;
 const RTP_ADJUST_TOLERANCE_PCT = 0.55;
 const HIT_RATE_TOLERANCE = 150;
 const BONUS_RATE_TOLERANCE = 8;
 
-const MAX_WIN_BOOK_ID = 88888;
-const MAX_WIN_AT_BET1 = 55200;
+const MAX_WIN_BOOK_ID = 99_999;
+
+const { buildBuy3MaxWinBook, buildBuy4MaxWinBook, MAX_WIN_AT_BET1 } = require('./jackpot-boards.js');
 
 function encodeReelsLine(spin) {
   const parts = [];
@@ -443,16 +444,47 @@ function adjustBooksToTargetRtp(books, config, targetRtpPct) {
   return metrics;
 }
 
-const { buildSyntheticMaxWinBook: buildJackpotBook } = require('./jackpot-boards.js');
+
+function encodeTorpedoMeta(bonusSpins) {
+  if (!bonusSpins?.length) return '';
+  const meta = bonusSpins.map((bs) => ({
+    d: bs.torpedoDrops || null,
+    c: !!bs.torpedoComplete,
+    r: bs.torpedoResolved || null,
+    w: Number(bs.win) || 0
+  }));
+  if (!meta.some((m) => m.d || m.c || m.r)) return '';
+  return JSON.stringify(meta);
+}
+
+function applyTorpedoMeta(bonusSpins, json) {
+  if (!json || !bonusSpins?.length) return;
+  try {
+    const meta = JSON.parse(json);
+    if (!Array.isArray(meta)) return;
+    for (let i = 0; i < bonusSpins.length && i < meta.length; i++) {
+      const m = meta[i];
+      if (!m) continue;
+      if (m.d) bonusSpins[i].torpedoDrops = m.d;
+      if (m.c) bonusSpins[i].torpedoComplete = true;
+      if (m.r) bonusSpins[i].torpedoResolved = m.r;
+      if (Number.isFinite(m.w)) bonusSpins[i].win = m.w;
+    }
+  } catch {
+    /* ignore */
+  }
+}
 
 function buildSyntheticMaxWinBook(bookId, config) {
-  const book = buildJackpotBook(bookId, config);
+  const scatter = Number(config.scatterGuarantee) === 3 ? 3 : 4;
+  const book =
+    scatter === 3
+      ? buildBuy3MaxWinBook(bookId, config)
+      : buildBuy4MaxWinBook(bookId, config);
   syncSpinObject(book.spin);
   for (const bs of book.bonusSpins) syncSpinObject(bs);
-  if (book.maxSpinCalcWin < MAX_WIN_AT_BET1 * 0.99) {
-    console.warn(
-      `[JACKPOT] спин 7 calc=${book.maxSpinCalcWin} < ${MAX_WIN_AT_BET1} — проверьте доски`
-    );
+  if (Number(book.totalWin) < MAX_WIN_AT_BET1 * 0.99) {
+    console.warn(`[JACKPOT] book ${bookId} total=${book.totalWin} < ${MAX_WIN_AT_BET1}`);
   }
   return book;
 }
@@ -486,6 +518,8 @@ function buildBooksFileContent(books, metrics, config) {
         for (let r = 0; r < NUM_REELS; r++) bs[`reel${r}`] = bs.reelIndices[r];
         line += `\t${encodeReelsLine(bs)}\t${encodeWeightsLine(bs.weights)}\t${encodeNudgeLine(bs.reelNudgeMult)}`;
       }
+      const torpMeta = encodeTorpedoMeta(b.bonusSpins);
+      if (torpMeta) line += `\t${torpMeta}`;
     }
     return line;
   });
@@ -503,6 +537,7 @@ function buildBooksFileContent(books, metrics, config) {
       `# BUY_SCATTER: ${scatterGuarantee}`,
       `# BUY_COST_MULT: ${spinCostMult}`,
       `# BONUS_RATE: 100% (все книги — покупка бонуса)`,
+      `# PAYBACK_RATE_TARGET: 25% (totalWin >= ${spinCostMult}×)`,
       `# Префикс seed: ${config.seedIdPrefix || 'xb'}_`
     );
   } else {
@@ -593,6 +628,10 @@ if (require.main === module) {
 module.exports = {
   runGeneration,
   makeBookAtIndex,
+  makeBookAtIndexMinWin,
+  buildSyntheticMaxWinBook,
+  encodeTorpedoMeta,
+  applyTorpedoMeta,
   computeRtpMetrics,
   computeHitRateMetrics,
   computeBonusRateMetrics,

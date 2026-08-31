@@ -1,7 +1,9 @@
 'use strict';
 
 /**
- * Детерминированные доски джекпот-книги (bonus4): торпеда по 1 символу/спин → максвин на 7-м.
+ * Детерминированные максвин-книги Das xBoot (55 200× @ bet=1).
+ * - base / buy4: бонус 4 scatter, торпеда 4 части каждый спин, капитаны (high1)
+ * - buy3: бонус 3 scatter, максвин на 5–7 спинах (target + nudge ×4)
  */
 
 const {
@@ -18,35 +20,45 @@ const {
 
 const MAX_WIN_AT_BET1 = 55200;
 const BONUS_SPINS = 7;
+const BONUS_EXPAND_REEL = 2;
+const BONUS3_ROWS = BASE_REEL_ROWS.map((h, i) => (i === BONUS_EXPAND_REEL ? 8 : h));
 
 const IX = {
   high1: SYMBOLS.indexOf('high1'),
   wild: SYMBOLS.indexOf('wild'),
+  target: SYMBOLS.indexOf('target'),
   wild4: SYMBOLS.indexOf('wild4'),
   xways4: SYMBOLS.indexOf('xways4'),
   xwild4: SYMBOLS.indexOf('xwild4')
 };
 
-function onesGrid() {
-  return BASE_REEL_ROWS.map((n) => Array.from({ length: n }, () => 1));
+const TORPEDO_BUILDERS = [
+  { reel: 1, row: 1, sym: IX.xways4 },
+  { reel: 2, row: 0, sym: IX.xwild4 },
+  { reel: 3, row: 0, sym: IX.xwild4 },
+  { reel: 4, row: 1, sym: IX.xways4 }
+];
+
+function onesGrid(rows = BASE_REEL_ROWS) {
+  return rows.map((n) => Array.from({ length: n }, () => 1));
 }
 
-function highGrid() {
-  return BASE_REEL_ROWS.map((n) => Array.from({ length: n }, () => IX.high1));
+function captainGrid(rows = BASE_REEL_ROWS) {
+  return rows.map((n) => Array.from({ length: n }, () => IX.high1));
 }
 
-function makeRecord(reelIndices, weights, nudge, seedLabel = '') {
+function makeRecord(reelIndices, weights, nudge, extra = {}) {
   return {
-    seed: seedLabel,
+    seed: '',
     reelIndices,
-    weights: weights || onesGrid(),
-    reelNudgeMult: nudge || [1, 1, 1, 1, 1, 1],
-    win: 0
+    weights: weights || onesGrid(reelIndices.map((col) => col.length)),
+    reelNudgeMult: nudge || Array(reelIndices.length).fill(1),
+    win: 0,
+    ...extra
   };
 }
 
-/** Расчёт ways как в slot.js (с торпедой после resolve). */
-function calculateWaysWinAtBet1(board, mults, reelNudgeMult, torpedoResolved = null) {
+function calculateWaysWinAtBet1(board, mults, reelNudgeMult, torpedoResolved = null, rows = BASE_REEL_ROWS) {
   const PAYABLE = ['high1', 'high2', 'high3', 'high4', 'high5', 'low1', 'low2', 'low3', 'low4', 'low5'];
   const PAYOUTS = {
     high1: { 3: 0.88, 4: 3, 5: 6, 6: 20 },
@@ -62,17 +74,13 @@ function calculateWaysWinAtBet1(board, mults, reelNudgeMult, torpedoResolved = n
   };
 
   const cellMatches = (sym, cell) =>
-    cell === sym ||
-    cell === 'wild' ||
-    cell === 'wild4' ||
-    cell === 'xways4' ||
-    cell === 'xwild4';
+    cell === sym || cell === 'wild' || cell === 'wild4' || cell === 'xways4' || cell === 'xwild4';
 
   const torpedoReels = [1, 2, 3, 4];
 
   function countOnReel(sym, r) {
     let count = 0;
-    for (let row = 0; row < BASE_REEL_ROWS[r]; row++) {
+    for (let row = 0; row < rows[r]; row++) {
       const name = SYMBOLS[board[r][row]];
       if (cellMatches(sym, name)) count += mults[r][row] || 1;
     }
@@ -80,7 +88,7 @@ function calculateWaysWinAtBet1(board, mults, reelNudgeMult, torpedoResolved = n
       const slot = torpedoReels.indexOf(r);
       if (slot >= 0) {
         const t = torpedoResolved[slot];
-        if (t && cellMatches(sym, SYMBOLS[t.symIx] || t.sym)) count += t.mult || 1;
+        if (t && cellMatches(sym, SYMBOLS[t.symIx] ?? t.sym)) count += t.mult || 1;
       }
     }
     return count;
@@ -105,134 +113,168 @@ function calculateWaysWinAtBet1(board, mults, reelNudgeMult, torpedoResolved = n
   return totalWin;
 }
 
-function boardFromIndices(ix) {
-  return ix.map((col) => col.map((i) => SYMBOLS[i] || 'low1'));
+function torpedoResolvedCaptains() {
+  return [
+    { symIx: IX.high1, mult: 2 },
+    { symIx: IX.high1, mult: 2 },
+    { symIx: IX.high1, mult: 2 },
+    { symIx: IX.high1, mult: 2 }
+  ];
 }
 
-/** 7 фри-спинов: 1–4 торпеда, 5–6 прогрев, 7 — максвин (nudge ×4 на барабанах 3–4). */
-function buildJackpotBonusSpinRecords() {
-  const spins = [];
-
-  const lowIx = SYMBOLS.indexOf('low1');
-
-  // Спины 1–4: по одному билдеру торпеды, без длинных линий (reel0 ломает 6OAK)
-  for (const spec of [
-    { reel: 1, row: 1, sym: IX.xways4 },
-    { reel: 2, row: 0, sym: IX.xwild4 },
-    { reel: 3, row: 0, sym: IX.xwild4 },
-    { reel: 4, row: 1, sym: IX.xways4 }
-  ]) {
-    const g = highGrid();
-    g[0][0] = lowIx;
+/** Каждый спин: 4 части торпеды, остальное — капитаны. */
+function makeTorpedoCollectSpin({ big = false, finalScreen = false } = {}) {
+  const g = captainGrid();
+  const drops = [];
+  for (const spec of TORPEDO_BUILDERS) {
     g[spec.reel][spec.row] = spec.sym;
-    spins.push(makeRecord(g, onesGrid(), [1, 1, 1, 1, 1, 1]));
+    drops.push({ slot: TORPEDO_BUILDERS.findIndex((s) => s.reel === spec.reel), reel: spec.reel, row: spec.row, sym: SYMBOLS[spec.sym] });
   }
 
-  // Спин 5: торпеда полная (wild4), умеренный выигрыш
-  {
-    const g = highGrid();
-    g[0][0] = lowIx;
-    g[1][1] = IX.wild4;
-    g[2][0] = IX.wild4;
-    g[3][0] = IX.wild4;
-    g[4][1] = IX.wild4;
-    const torp = [
-      { symIx: IX.high1, mult: 2 },
-      { symIx: IX.high1, mult: 2 },
-      { symIx: IX.high1, mult: 2 },
-      { symIx: IX.high1, mult: 2 }
-    ];
-    const w = calculateWaysWinAtBet1(g, onesGrid(), [1, 1, 1, 1, 1, 1], torp);
-    spins.push(makeRecord(g, onesGrid(), [1, 1, 1, 1, 1, 1]));
-    spins[spins.length - 1].win = w;
-  }
-
-  // Спин 6: торпеда на поле (wild4), без nudge ×4 — прогрев перед финалом
-  {
-    const g = highGrid();
-    g[0][0] = lowIx;
-    g[1][1] = IX.wild4;
-    g[2][0] = IX.wild4;
-    g[3][0] = IX.wild4;
-    g[4][1] = IX.wild4;
-    const w = calculateWaysWinAtBet1(g, onesGrid(), [1, 1, 1, 1, 1, 1], null);
-    spins.push(makeRecord(g, onesGrid(), [1, 1, 1, 1, 1, 1]));
-    spins[spins.length - 1].win = w;
-  }
-
-  // Спин 7: полный экран wild/wild4, nudge ×4 на барабанах 3–4
-  {
-    const g = BASE_REEL_ROWS.map((n) => Array.from({ length: n }, () => IX.wild4));
+  let nudge = [1, 1, 1, 1, 1, 1];
+  if (finalScreen) {
     for (let row = 0; row < BASE_REEL_ROWS[2]; row++) g[2][row] = IX.wild;
     for (let row = 0; row < BASE_REEL_ROWS[3]; row++) g[3][row] = IX.wild;
-    const nudge = [1, 1, 4, 4, 1, 1];
-    const w = calculateWaysWinAtBet1(g, onesGrid(), nudge, null);
-    spins.push(makeRecord(g, onesGrid(), nudge));
-    spins[spins.length - 1].win = w;
+    for (let r = 0; r < NUM_REELS; r++) {
+      for (let row = 0; row < BASE_REEL_ROWS[r]; row++) {
+        g[r][row] = r === 2 || r === 3 ? g[r][row] : IX.wild4;
+      }
+    }
+    nudge = [1, 1, 4, 4, 1, 1];
+  } else if (big) {
+    for (let r = 1; r <= 4; r++) {
+      for (let row = 0; row < BASE_REEL_ROWS[r]; row++) g[r][row] = IX.wild4;
+    }
   }
 
+  const torpedoResolved = finalScreen ? null : torpedoResolvedCaptains();
+  const w = calculateWaysWinAtBet1(g, onesGrid(), nudge, torpedoResolved);
+  const rec = makeRecord(g, onesGrid(), nudge, {
+    torpedoDrops: drops,
+    torpedoComplete: !finalScreen,
+    torpedoResolved: torpedoResolved || undefined
+  });
+  rec.win = w;
+  return rec;
+}
+
+/** 7 фри-спинов bonus4: каждый спин собирает торпеду из 4 частей; финал — полный экран. */
+function buildJackpotBonusSpinRecords() {
+  const spins = [];
+  for (let i = 0; i < 5; i++) spins.push(makeTorpedoCollectSpin({ big: i >= 3 }));
+  spins.push(makeTorpedoCollectSpin({ big: true }));
+  spins.push(makeTorpedoCollectSpin({ finalScreen: true }));
   return spins;
 }
 
-function buildSyntheticMaxWinBook(bookId, config) {
+function captainBonus3Grid() {
+  return captainGrid(BONUS3_ROWS);
+}
+
+function buildBuy3MaxWinBonusSpins() {
+  const spins = [];
+  for (let i = 0; i < 4; i++) {
+    const g = captainBonus3Grid();
+    g[0][0] = SYMBOLS.indexOf('low1');
+    spins.push(makeRecord(g, onesGrid(BONUS3_ROWS), [1, 1, 1, 1, 1, 1]));
+  }
+
+  const makeBigSpin = () => {
+    const g = captainBonus3Grid();
+    g[0][0] = SYMBOLS.indexOf('low1');
+    g[BONUS_EXPAND_REEL][0] = IX.target;
+    for (let row = 1; row < BONUS3_ROWS[BONUS_EXPAND_REEL]; row++) g[BONUS_EXPAND_REEL][row] = IX.high1;
+    const nudge = [1, 1, 1, 4, 1, 1];
+    const w = calculateWaysWinAtBet1(g, onesGrid(BONUS3_ROWS), nudge, null, BONUS3_ROWS);
+    const rec = makeRecord(g, onesGrid(BONUS3_ROWS), nudge);
+    rec.win = w;
+    return rec;
+  };
+
+  spins.push(makeBigSpin());
+  spins.push(makeBigSpin());
+  spins.push(makeBigSpin());
+  return spins;
+}
+
+function capBookTotals(book) {
+  let bonusWin = book.bonusSpins.reduce((s, sp) => s + (Number(sp.win) || 0), 0);
+  const baseWin = Number(book.spin.win) || 0;
+  let totalWin = baseWin + bonusWin;
+  if (totalWin > MAX_WIN_AT_BET1) {
+    totalWin = MAX_WIN_AT_BET1;
+    bonusWin = Math.max(0, totalWin - baseWin);
+  }
+  book.bonusWin = bonusWin;
+  book.totalWin = totalWin;
+  book.totalWinMultiplier = winMultiplier(totalWin, 1);
+  return book;
+}
+
+function buildSyntheticMaxWinBook(bookId, config = {}) {
   const seedIdPrefix = config.seedIdPrefix || 'xb';
+  const scatterCount = config.scatterCount === 3 ? 3 : 4;
   const rng = createRng((bookId * 99991) >>> 0);
-  const landing = buildBoardWithScatterCount(4, rng);
+  const landing = buildBoardWithScatterCount(scatterCount, rng);
   const ctx = makeSimCtx(rng);
   const outcome = simulateBaseSpinOutcome(landing, ctx);
 
-  const bonusSpins = buildJackpotBonusSpinRecords();
+  const bonusSpins =
+    scatterCount === 3 ? buildBuy3MaxWinBonusSpins() : buildJackpotBonusSpinRecords();
+
   for (let i = 0; i < bonusSpins.length; i++) {
+    const rows = scatterCount === 3 ? BONUS3_ROWS : BASE_REEL_ROWS;
     bonusSpins[i].seed = makeSpinSeed(bookId, i + 1, bonusSpins[i].reelIndices, bonusSpins[i].weights, seedIdPrefix);
+    for (let r = 0; r < NUM_REELS; r++) bonusSpins[i][`reel${r}`] = bonusSpins[i].reelIndices[r];
   }
 
-  let bonusWin = bonusSpins.reduce((s, sp) => s + (Number(sp.win) || 0), 0);
-  const baseWin = outcome.win;
-  let totalWin = baseWin + bonusWin;
-
-  const cap = MAX_WIN_AT_BET1;
-  if (totalWin > cap) totalWin = cap;
-  if (baseWin + bonusWin > cap) {
-    bonusWin = Math.max(0, cap - baseWin);
-  }
-
-  const baseSpinSeed = makeSpinSeed(bookId, 0, outcome.board.map((c) => c.map((s) => SYMBOLS.indexOf(s))), outcome.mults, seedIdPrefix);
-
-  const spin = {
-    seed: baseSpinSeed,
-    win: baseWin,
-    winMultiplier: winMultiplier(baseWin, 1),
-    reelIndices: outcome.board.map((c) => c.map((s) => SYMBOLS.indexOf(s))),
-    weights: outcome.mults.map((c) => [...c]),
-    reelNudgeMult: outcome.reelNudgeMult.slice()
-  };
-
-  const lastWin = calculateWaysWinAtBet1(
-    bonusSpins[6].reelIndices,
-    bonusSpins[6].weights,
-    bonusSpins[6].reelNudgeMult
+  const baseSpinSeed = makeSpinSeed(
+    bookId,
+    0,
+    outcome.board.map((c) => c.map((s) => SYMBOLS.indexOf(s))),
+    outcome.mults,
+    seedIdPrefix
   );
 
-  return {
+  const book = capBookTotals({
     id: bookId,
     seed: baseSpinSeed,
     hasBonus: true,
-    scatterCount: 4,
+    scatterCount,
     isJackpot: true,
-    spin,
+    spin: {
+      seed: baseSpinSeed,
+      win: outcome.win,
+      winMultiplier: winMultiplier(outcome.win, 1),
+      reelIndices: outcome.board.map((c) => c.map((s) => SYMBOLS.indexOf(s))),
+      weights: outcome.mults.map((c) => [...c]),
+      reelNudgeMult: outcome.reelNudgeMult.slice()
+    },
     bonusSpins,
-    bonusWin,
-    totalWin,
-    totalWinMultiplier: winMultiplier(totalWin, 1),
-    maxSpinCalcWin: lastWin
-  };
+    bonusWin: 0,
+    totalWin: 0
+  });
+
+  return book;
+}
+
+function buildBuy3MaxWinBook(bookId, config = {}) {
+  return buildSyntheticMaxWinBook(bookId, { ...config, seedIdPrefix: config.seedIdPrefix || 'xbb3', scatterCount: 3 });
+}
+
+function buildBuy4MaxWinBook(bookId, config = {}) {
+  return buildSyntheticMaxWinBook(bookId, { ...config, seedIdPrefix: config.seedIdPrefix || 'xbb4', scatterCount: 4 });
 }
 
 module.exports = {
   MAX_WIN_AT_BET1,
   BONUS_SPINS,
+  BONUS3_ROWS,
   buildJackpotBonusSpinRecords,
+  buildBuy3MaxWinBonusSpins,
   buildSyntheticMaxWinBook,
+  buildBuy3MaxWinBook,
+  buildBuy4MaxWinBook,
   calculateWaysWinAtBet1,
-  boardFromIndices
+  makeTorpedoCollectSpin
 };

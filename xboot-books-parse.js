@@ -80,6 +80,23 @@ function parseBookLine(trimmed, scatterIx = 11) {
         bonusSpins.push(bs);
       }
       if (!ok || bonusSpins.length !== n) bonusSpins = [];
+      else if (cols[ci] && String(cols[ci]).trim().startsWith('[')) {
+        try {
+          const meta = JSON.parse(cols[ci]);
+          if (Array.isArray(meta)) {
+            for (let i = 0; i < bonusSpins.length && i < meta.length; i++) {
+              const m = meta[i];
+              if (!m) continue;
+              if (m.d) bonusSpins[i].torpedoDrops = m.d;
+              if (m.c) bonusSpins[i].torpedoComplete = true;
+              if (m.r) bonusSpins[i].torpedoResolved = m.r;
+              if (Number.isFinite(m.w)) bonusSpins[i].win = m.w;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }
     }
   }
 
